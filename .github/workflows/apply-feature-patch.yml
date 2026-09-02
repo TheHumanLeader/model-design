@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: apply-model-tags-relations
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   apply:
@@ -33,13 +33,25 @@ jobs:
           echo "f5160ca6b51cdf81fea0a08efea2bbdacec97068b0a25a4df133bef9c8fdf09d  /tmp/model-tags-relations.patch.gz.b64" | sha256sum -c -
           base64 -d /tmp/model-tags-relations.patch.gz.b64 | gzip -d > /tmp/model-tags-relations.patch
           echo "22be64389a77498db804bfe984d9ab1ade1924c68896e5ce483f8b51b8c460f1  /tmp/model-tags-relations.patch" | sha256sum -c -
-          git apply --check /tmp/model-tags-relations.patch
+          git apply --check \
+            --exclude=src/styles/inspector.css \
+            --exclude=src/styles/overlays.css \
+            /tmp/model-tags-relations.patch
 
       - name: Apply feature
         shell: bash
         run: |
           set -euo pipefail
-          git apply /tmp/model-tags-relations.patch
+          git apply \
+            --exclude=src/styles/inspector.css \
+            --exclude=src/styles/overlays.css \
+            /tmp/model-tags-relations.patch
+
+          printf '\n' >> src/styles/inspector.css
+          cat .automation/inspector-add.css >> src/styles/inspector.css
+          printf '\n' >> src/styles/overlays.css
+          cat .automation/overlays-add.css >> src/styles/overlays.css
+
           rm -rf .automation
           rm -f .github/workflows/apply-feature-patch.yml
 
