@@ -1,0 +1,64 @@
+name: Apply dense model core
+
+on:
+  push:
+    branches:
+      - feat/dense-inspector-events-triggers
+    paths:
+      - .automation/apply_dense_core.py
+      - .github/workflows/apply-dense-core.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-dense-model-core
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    name: Apply and verify core
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/dense-inspector-events-triggers
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Apply core migration
+        run: python .automation/apply_dense_core.py
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verify npm package
+        run: npm run pack:check
+
+      - name: Commit verified core
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .automation/apply_dense_core.py
+          rmdir .automation 2>/dev/null || true
+          rm -f .github/workflows/apply-dense-core.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add model event and trigger core"
+          git push origin HEAD:feat/dense-inspector-events-triggers
