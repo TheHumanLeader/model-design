@@ -90,7 +90,7 @@ function handleMenu(event: MouseEvent): void {
     </header>
 
     <p class="md-model-node__purpose">
-      {{ model.purpose || '点击模型，在右侧配置模型用途与字段。' }}
+      {{ model.purpose || '选择模型，在右侧配置字段、事件与触发器。' }}
     </p>
 
     <div v-if="visibleTags.length" class="md-model-node__tags">
@@ -126,8 +126,12 @@ function handleMenu(event: MouseEvent): void {
 
     <footer class="md-model-node__footer">
       <span>{{ model.groupId ? '已加入分组' : '根画板' }}</span>
-      <span v-if="relationCount">{{ relationCount }} 个关系</span>
-      <span v-else>{{ model.fields.length }} 个字段</span>
+      <span class="md-model-node__metrics">
+        <b title="字段">F {{ model.fields.length }}</b>
+        <b title="事件 / Function">Fn {{ model.events.length }}</b>
+        <b title="触发器">T {{ model.triggers.length }}</b>
+        <b v-if="relationCount" title="关系">R {{ relationCount }}</b>
+      </span>
     </footer>
   </article>
 </template>
