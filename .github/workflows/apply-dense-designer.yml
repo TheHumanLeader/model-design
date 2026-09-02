@@ -1,0 +1,71 @@
+name: Apply dense model designer
+
+on:
+  push:
+    branches:
+      - feat/dense-inspector-events-triggers
+    paths:
+      - .automation/apply_dense_designer.py
+      - .github/workflows/apply-dense-designer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-dense-model-designer
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    name: Apply and verify designer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/dense-inspector-events-triggers
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Apply pending core migration
+        shell: bash
+        run: |
+          if [ -f .automation/apply_dense_core.py ]; then
+            python .automation/apply_dense_core.py
+          fi
+
+      - name: Apply designer migration
+        run: python .automation/apply_dense_designer.py
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verify npm package
+        run: npm run pack:check
+
+      - name: Commit verified feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .automation
+          rm -f .github/workflows/apply-dense-core.yml
+          rm -f .github/workflows/apply-dense-designer.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add dense fields events and triggers editor"
+          git push origin HEAD:feat/dense-inspector-events-triggers
