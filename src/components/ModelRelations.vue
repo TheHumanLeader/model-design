@@ -1,7 +1,7 @@
 <script setup lang="ts" vapor>
 import { createId } from '../core'
 
-interface RelationLine {
+export interface RelationLine {
   id: string
   path: string
   label: string
