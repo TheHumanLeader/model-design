@@ -3,12 +3,17 @@ import type {
   FieldPatch,
   GroupPatch,
   ModelDesignDocument,
+  ModelEvent,
+  ModelEventParameter,
   ModelField,
   ModelFieldRelation,
   ModelGroup,
   ModelNode,
   ModelPatch,
   ModelRelationType,
+  ModelTrigger,
+  ModelTriggerSource,
+  ModelTriggerTiming,
   Point,
   Rect,
 } from '../types'
@@ -20,12 +25,20 @@ export const MIN_GROUP_WIDTH = 336
 export const MIN_GROUP_HEIGHT = 220
 export const DEFAULT_GRID_SIZE = 12
 
-const GROUP_PADDING = 24
-const GROUP_CONTENT_TOP = GROUP_HEADER_HEIGHT + 18
+export const GROUP_PADDING = 24
+export const GROUP_CONTENT_TOP = GROUP_HEADER_HEIGHT + 18
 
-type ModelSeed = Partial<Omit<ModelNode, 'id' | 'kind' | 'fields'>> & {
+type ModelEventSeed = Partial<Omit<ModelEvent, 'parameters'>> & {
+  parameters?: Array<Partial<ModelEventParameter>>
+}
+
+type ModelSeed = Partial<
+  Omit<ModelNode, 'id' | 'kind' | 'fields' | 'events' | 'triggers'>
+> & {
   id?: string
   fields?: Array<Partial<ModelField>>
+  events?: ModelEventSeed[]
+  triggers?: Array<Partial<ModelTrigger>>
 }
 
 type GroupSeed = Partial<Omit<ModelGroup, 'id' | 'kind'>> & {
@@ -63,9 +76,52 @@ export function createField(seed: Partial<ModelField> = {}): ModelField {
   }
 }
 
+export function createEventParameter(
+  seed: Partial<ModelEventParameter> = {},
+): ModelEventParameter {
+  return {
+    id: seed.id || createId('parameter'),
+    name: asText(seed.name),
+    type: asText(seed.type) || 'unknown',
+    purpose: asText(seed.purpose),
+    required: Boolean(seed.required),
+  }
+}
+
+export function createModelEvent(seed: ModelEventSeed = {}): ModelEvent {
+  const name = asText(seed.name) || '事件'
+  return {
+    id: seed.id || createId('event'),
+    name,
+    code: asText(seed.code) || normalizeCode(name, 'event'),
+    purpose: asText(seed.purpose),
+    parameters: Array.isArray(seed.parameters)
+      ? seed.parameters.map(createEventParameter)
+      : [],
+    returnType: asText(seed.returnType) || 'void',
+    async: Boolean(seed.async),
+  }
+}
+
+export function createModelTrigger(
+  seed: Partial<ModelTrigger> = {},
+): ModelTrigger {
+  return {
+    id: seed.id || createId('trigger'),
+    name: asText(seed.name) || '触发器',
+    source: normalizeTriggerSource(seed.source),
+    timing: normalizeTriggerTiming(seed.timing),
+    fieldId: asNullableText(seed.fieldId),
+    eventId: asNullableText(seed.eventId),
+    condition: asText(seed.condition),
+    purpose: asText(seed.purpose),
+    enabled: seed.enabled === undefined ? true : Boolean(seed.enabled),
+  }
+}
+
 export function createModel(seed: ModelSeed = {}): ModelNode {
   const name = asText(seed.name) || '模型'
-  return {
+  const model: ModelNode = {
     id: seed.id || createId('model'),
     kind: 'model',
     name,
@@ -77,7 +133,14 @@ export function createModel(seed: ModelSeed = {}): ModelNode {
     width: Math.max(220, finiteNumber(seed.width, MODEL_NODE_WIDTH)),
     groupId: asNullableText(seed.groupId),
     fields: Array.isArray(seed.fields) ? seed.fields.map(createField) : [],
+    events: Array.isArray(seed.events) ? seed.events.map(createModelEvent) : [],
+    triggers: Array.isArray(seed.triggers)
+      ? seed.triggers.map(createModelTrigger)
+      : [],
   }
+
+  cleanInvalidModelReferences(model)
+  return model
 }
 
 export function createGroup(seed: GroupSeed = {}): ModelGroup {
@@ -133,6 +196,22 @@ export function createDemoDocument(): ModelDesignDocument {
   })
 
   const permissionIdField = permission.fields[0]
+  const syncPermissionEvent = createModelEvent({
+    name: '同步用户权限',
+    code: 'syncPermissions',
+    purpose: '用户资料变化后重新计算权限快照',
+    returnType: 'Promise<void>',
+    async: true,
+    parameters: [
+      {
+        name: 'userId',
+        type: 'string',
+        purpose: '发生变化的用户标识',
+        required: true,
+      },
+    ],
+  })
+
   const user = createModel({
     name: '用户模型',
     code: 'user',
@@ -170,6 +249,18 @@ export function createDemoDocument(): ModelDesignDocument {
           type: 'many-to-many',
           label: '拥有权限',
         },
+      },
+    ],
+    events: [syncPermissionEvent],
+    triggers: [
+      {
+        name: '用户更新后同步权限',
+        source: 'update',
+        timing: 'after',
+        eventId: syncPermissionEvent.id,
+        condition: '',
+        purpose: '确保用户资料与权限快照保持一致',
+        enabled: true,
       },
     ],
   })
@@ -232,7 +323,15 @@ export function normalizeDocument(value: unknown): ModelDesignDocument {
   const models = rawModels
     .filter(isRecord)
     .map((model) => {
-      const rawFields = Array.isArray(model.fields) ? model.fields.filter(isRecord) : []
+      const rawFields = Array.isArray(model.fields)
+        ? model.fields.filter(isRecord)
+        : []
+      const rawEvents = Array.isArray(model.events)
+        ? model.events.filter(isRecord)
+        : []
+      const rawTriggers = Array.isArray(model.triggers)
+        ? model.triggers.filter(isRecord)
+        : []
       const groupId = asNullableText(model.groupId)
 
       return createModel({
@@ -256,10 +355,46 @@ export function normalizeDocument(value: unknown): ModelDesignDocument {
           unique: Boolean(field.unique),
           relation: normalizeFieldRelation(field.relation),
         })),
+        events: rawEvents.map((item) => {
+          const rawParameters = Array.isArray(item.parameters)
+            ? item.parameters.filter(isRecord)
+            : []
+
+          return {
+            id: asText(item.id) || undefined,
+            name: asText(item.name),
+            code: asText(item.code),
+            purpose: asText(item.purpose),
+            returnType: asText(item.returnType) || 'void',
+            async: Boolean(item.async),
+            parameters: rawParameters.map((parameter) => ({
+              id: asText(parameter.id) || undefined,
+              name: asText(parameter.name),
+              type: asText(parameter.type) || 'unknown',
+              purpose: asText(parameter.purpose),
+              required: Boolean(parameter.required),
+            })),
+          }
+        }),
+        triggers: rawTriggers.map((trigger) => ({
+          id: asText(trigger.id) || undefined,
+          name: asText(trigger.name),
+          source: normalizeTriggerSource(trigger.source),
+          timing: normalizeTriggerTiming(trigger.timing),
+          fieldId: asNullableText(trigger.fieldId),
+          eventId: asNullableText(trigger.eventId),
+          condition: asText(trigger.condition),
+          purpose: asText(trigger.purpose),
+          enabled:
+            trigger.enabled === undefined
+              ? true
+              : Boolean(trigger.enabled),
+        })),
       })
     })
 
   const normalizedModels = deduplicateIds(models, 'model')
+  normalizedModels.forEach(cleanInvalidModelReferences)
   cleanInvalidRelations(normalizedModels)
 
   return {
@@ -346,6 +481,51 @@ export function findContainingGroup(
   )
 }
 
+export function constrainModelMovement(
+  document: ModelDesignDocument,
+  modelIds: Iterable<string>,
+  delta: Point,
+): Point {
+  const selectedIds = new Set(modelIds)
+  let minimumX = Number.NEGATIVE_INFINITY
+  let maximumX = Number.POSITIVE_INFINITY
+  let minimumY = Number.NEGATIVE_INFINITY
+  let maximumY = Number.POSITIVE_INFINITY
+
+  document.models.forEach((model) => {
+    if (!selectedIds.has(model.id) || !model.groupId) return
+
+    const group = document.groups.find(
+      (candidate) => candidate.id === model.groupId,
+    )
+    if (!group) return
+
+    const contentLeft = group.x + GROUP_PADDING
+    const contentTop = group.y + GROUP_CONTENT_TOP
+    const contentRight = group.x + group.width - GROUP_PADDING
+    const contentBottom = group.y + group.height - GROUP_PADDING
+
+    minimumX = Math.max(minimumX, contentLeft - model.x)
+    maximumX = Math.min(maximumX, contentRight - model.width - model.x)
+    minimumY = Math.max(minimumY, contentTop - model.y)
+    maximumY = Math.min(
+      maximumY,
+      contentBottom - modelHeight(model) - model.y,
+    )
+  })
+
+  return {
+    x:
+      minimumX === Number.NEGATIVE_INFINITY
+        ? delta.x
+        : clamp(delta.x, minimumX, Math.max(minimumX, maximumX)),
+    y:
+      minimumY === Number.NEGATIVE_INFINITY
+        ? delta.y
+        : clamp(delta.y, minimumY, Math.max(minimumY, maximumY)),
+  }
+}
+
 export function getDocumentBounds(document: ModelDesignDocument): Rect | null {
   const rectangles: Rect[] = [
     ...document.groups,
@@ -387,20 +567,30 @@ export function findFreeModelPosition(
 
   if (group) {
     const minX = group.x + GROUP_PADDING
-    const maxX = Math.max(minX, group.x + group.width - MODEL_NODE_WIDTH - GROUP_PADDING)
     const minY = group.y + GROUP_CONTENT_TOP
+    const maxX = Math.max(
+      minX,
+      group.x + group.width - MODEL_NODE_WIDTH - GROUP_PADDING,
+    )
+    const maxY = Math.max(
+      minY,
+      group.y + group.height - MODEL_NODE_BASE_HEIGHT - GROUP_PADDING,
+    )
     const inside = {
       x: snap(clamp(origin.x, minX, maxX), gridSize),
-      y: snap(Math.max(origin.y, minY), gridSize),
+      y: snap(clamp(origin.y, minY, maxY), gridSize),
     }
 
     if (isModelPositionFree(document, inside, ignoredModelId)) {
       return inside
     }
 
-    const gap = 24
+    const gap = 18
     const usableWidth = Math.max(MODEL_NODE_WIDTH, group.width - GROUP_PADDING * 2)
-    const columns = Math.max(1, Math.floor((usableWidth + gap) / (MODEL_NODE_WIDTH + gap)))
+    const columns = Math.max(
+      1,
+      Math.floor((usableWidth + gap) / (MODEL_NODE_WIDTH + gap)),
+    )
 
     for (let index = 0; index < 160; index += 1) {
       const column = index % columns
@@ -410,10 +600,16 @@ export function findFreeModelPosition(
         y: snap(minY + row * (MODEL_NODE_BASE_HEIGHT + gap), gridSize),
       }
 
+      if (candidate.x > maxX || candidate.y > maxY) {
+        continue
+      }
+
       if (isModelPositionFree(document, candidate, ignoredModelId)) {
         return candidate
       }
     }
+
+    return inside
   }
 
   if (isModelPositionFree(document, origin, ignoredModelId)) {
@@ -719,6 +915,42 @@ function normalizeRelationType(value: unknown): ModelRelationType {
     default:
       return 'many-to-one'
   }
+}
+
+function normalizeTriggerSource(value: unknown): ModelTriggerSource {
+  switch (value) {
+    case 'create':
+    case 'update':
+    case 'delete':
+    case 'field-change':
+    case 'custom':
+      return value
+    default:
+      return 'update'
+  }
+}
+
+function normalizeTriggerTiming(value: unknown): ModelTriggerTiming {
+  return value === 'before' ? 'before' : 'after'
+}
+
+function cleanInvalidModelReferences(model: ModelNode): void {
+  const fieldIds = new Set(model.fields.map((field) => field.id))
+  const eventIds = new Set(model.events.map((item) => item.id))
+
+  model.triggers.forEach((trigger) => {
+    if (trigger.fieldId && !fieldIds.has(trigger.fieldId)) {
+      trigger.fieldId = null
+    }
+
+    if (trigger.eventId && !eventIds.has(trigger.eventId)) {
+      trigger.eventId = null
+    }
+
+    if (trigger.source !== 'update' && trigger.source !== 'field-change') {
+      trigger.fieldId = null
+    }
+  })
 }
 
 function cleanInvalidRelations(models: ModelNode[]): void {
