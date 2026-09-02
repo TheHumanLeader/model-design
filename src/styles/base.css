@@ -41,36 +41,9 @@
     "Microsoft YaHei",
     sans-serif;
   line-height: 1.45;
-  color-scheme: light;
   outline: none;
 }
 
-.md-model-designer--dark {
-  --md-bg: #111722;
-  --md-panel: rgba(24, 32, 47, 0.95);
-  --md-panel-solid: #18202f;
-  --md-surface: #1d2637;
-  --md-surface-strong: #263147;
-  --md-text: #edf2ff;
-  --md-muted: #a1adc3;
-  --md-faint: #748098;
-  --md-line: #303b50;
-  --md-line-strong: #46536d;
-  --md-accent: #8790ff;
-  --md-accent-2: #a883ff;
-  --md-accent-soft: rgba(111, 122, 255, 0.16);
-  --md-accent-border: rgba(144, 152, 255, 0.48);
-  --md-danger: #ff6f86;
-  --md-danger-soft: rgba(255, 99, 124, 0.14);
-  --md-success: #49ca8e;
-  --md-group-fill: rgba(119, 128, 255, 0.055);
-  --md-group-border: rgba(144, 152, 255, 0.38);
-  --md-grid-small: rgba(151, 162, 255, 0.055);
-  --md-grid-large: rgba(151, 162, 255, 0.105);
-  --md-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
-  --md-shadow-small: 0 8px 24px rgba(0, 0, 0, 0.26);
-  color-scheme: dark;
-}
 
 .md-model-designer--without-toolbar {
   grid-template-rows: minmax(0, 1fr) 28px;

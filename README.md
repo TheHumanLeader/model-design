@@ -1,8 +1,10 @@
 # Model Design
 
-基于 **Vue 3.6 Vapor Mode** 与 TypeScript 构建的高性能可视化模型设计器。
+基于 **Vue 3.6 Vapor Mode** 与 TypeScript 构建的高性能可视化模型设计器组件。
 
-> 当前处于 `0.1.0-next` 基线开发阶段，先建立稳定的数据结构、交互模型与 npm 组件边界。Vue 3.6 正式版发布前，npm 包应使用 `next` 标签发布。
+在线演示：<https://thehumanleader.github.io/model-design/>
+
+> 当前处于 `0.1.0-next` 开发阶段。Vue 3.6 正式版发布前，npm 包使用 `next` 标签发布。
 
 ## 当前能力
 
@@ -13,14 +15,36 @@
 - 将一个或多个模型组成分组
 - 将模型拖入或拖出分组
 - 分组整体移动与尺寸调整
-- 配置模型名称、模型标识、模型用途
-- 配置字段名称、字段标识、字段类型、字段用途
-- 配置字段的必填、主键、唯一属性
+- 配置模型名称、模型标识、模型用途与模型标签
+- 配置字段名称、字段标识、字段类型、字段用途与字段属性
+- 字段可关联目标模型、目标字段，并设置一对一、一对多、多对一、多对多
+- 右键模型查看关系模型：保留当前模型及其直接关系模型，弱化无关模型并绘制关系线
 - 撤销、重做
 - JSON 导入、导出
-- 浅色、深色与自动主题
 - 只读模式
 - 纯 Vapor SFC，不使用 JSX、TSX 或手写 VNode
+
+## 组件外观原则
+
+`model-design` 不维护浅色、深色或自动主题状态。它是一个组件，外观由宿主应用控制。
+
+组件提供一组 CSS 变量作为默认设计令牌，业务项目可以在容器上直接覆盖：
+
+```css
+.my-model-designer {
+  --md-bg: #f5f7fb;
+  --md-panel-solid: #ffffff;
+  --md-text: #172033;
+  --md-muted: #758095;
+  --md-line: #dce2ec;
+  --md-accent: #5368f4;
+  --md-accent-2: #725cf4;
+}
+```
+
+```vue
+<ModelDesigner class="my-model-designer" v-model="documentModel" />
+```
 
 ## 技术栈
 
@@ -52,8 +76,6 @@ cd model-design
 npm install
 npm run dev
 ```
-
-浏览器打开 Vite 输出的本地地址即可。
 
 ## 验证
 
@@ -104,7 +126,6 @@ const documentModel = shallowRef<ModelDesignDocument>(
   <ModelDesigner
     v-model="documentModel"
     height="100dvh"
-    theme="auto"
   />
 </template>
 ```
@@ -115,7 +136,6 @@ const documentModel = shallowRef<ModelDesignDocument>(
 |---|---|---:|---|
 | `v-model` | `ModelDesignDocument` | 空文档 | 模型设计数据 |
 | `readonly` | `boolean` | `false` | 只读模式 |
-| `theme` | `'light' \| 'dark' \| 'auto'` | `'light'` | 主题 |
 | `height` | `string \| number` | `'100%'` | 组件高度 |
 | `showToolbar` | `boolean` | `true` | 是否显示顶部工具栏 |
 | `showInspector` | `boolean` | `true` | 是否显示右侧配置面板 |
@@ -146,6 +166,8 @@ interface ModelDesignerApi {
   groupSelected(): string | null
   deleteSelected(): void
   clearSelection(): void
+  viewRelations(modelId: string): void
+  clearRelationView(): void
   undo(): void
   redo(): void
   fitView(): void
@@ -157,18 +179,43 @@ interface ModelDesignerApi {
 }
 ```
 
-## 数据结构原则
+## 数据结构
 
-模型与分组的所属关系只维护一份：
+模型与分组的所属关系只维护在模型上：
 
 ```ts
 interface ModelNode {
   id: string
+  name: string
+  code: string
+  purpose: string
+  tags: string[]
   groupId: string | null
+  fields: ModelField[]
 }
 ```
 
-分组不再额外保存 `modelIds`，避免模型和分组各维护一份成员关系后出现不同步。
+字段关系也只维护在来源字段上：
+
+```ts
+interface ModelField {
+  id: string
+  name: string
+  code: string
+  type: ModelFieldType
+  purpose: string
+  relation: ModelFieldRelation | null
+}
+
+interface ModelFieldRelation {
+  modelId: string
+  fieldId: string | null
+  type: 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many'
+  label: string
+}
+```
+
+`modelId` 表示目标模型，`fieldId` 表示可选的目标字段。关系查看同时识别当前模型的出向关系和入向关系。
 
 模型文档只保存业务设计数据：
 
@@ -180,7 +227,7 @@ interface ModelDesignDocument {
 }
 ```
 
-选中状态、拖动状态、画板缩放与右键菜单属于运行时编辑器状态，不混入导出的模型文档。
+选中状态、拖动状态、画板缩放、右键菜单与当前关系查看焦点都属于运行时状态，不写入导出的模型文档。
 
 ## 目录
 
@@ -190,6 +237,7 @@ src/
 │  ├─ ModelDesigner.vue
 │  ├─ ModelNode.vue
 │  ├─ ModelGroup.vue
+│  ├─ ModelRelations.vue
 │  ├─ ModelInspector.vue
 │  └─ DesignerContextMenu.vue
 ├─ core/
@@ -207,19 +255,18 @@ src/
 
 ## 性能约束
 
-项目从基线阶段遵守以下规则：
-
 1. 纯 Vapor 模板，不使用 JSX、TSX、`h()` 或依赖 VNode 的接口。
 2. 拖动过程中只更新临时位移，鼠标松开后才提交模型文档。
 3. 模型文档采用不可变替换，避免对大型深层结构做无边界的响应式写入。
 4. 节点位置使用 `translate3d()`，减少高频布局写入。
 5. 高频画板数据与配置面板数据分离。
-6. 后续大规模节点场景将加入视口裁剪，而不是依赖框架渲染全部不可见 DOM。
+6. 关系线只在关系查看模式中渲染，不让普通编辑状态承担无意义的 SVG 更新。
+7. 后续大规模节点场景加入视口裁剪，而不是依赖框架渲染全部不可见 DOM。
 
 ## 下一阶段
 
 - 选框批量选择
-- 模型关系与字段关系连线
+- 关系线锚点与交互编辑
 - 对齐线与吸附线
 - 命令系统与可合并事务
 - 插件式字段类型

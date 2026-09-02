@@ -47,7 +47,9 @@
   transition:
     border-color 0.16s ease,
     background 0.16s ease,
-    box-shadow 0.16s ease;
+    box-shadow 0.16s ease,
+    opacity 0.2s ease,
+    filter 0.2s ease;
 }
 
 .md-model-group::before {
@@ -79,6 +81,17 @@
 .md-model-group.is-resizing {
   opacity: 0.9;
   transition: none;
+}
+
+.md-model-group.is-relation-context {
+  opacity: 0.24;
+  pointer-events: none;
+}
+
+.md-model-group.is-relation-dimmed {
+  opacity: 0.035;
+  filter: grayscale(1);
+  pointer-events: none;
 }
 
 .md-model-group__header {

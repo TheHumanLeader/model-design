@@ -121,3 +121,131 @@
     transform: translate(-50%, 0);
   }
 }
+
+.md-relation-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.md-relation-line__halo,
+.md-relation-line__path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.md-relation-line__halo {
+  stroke: var(--md-panel-solid);
+  stroke-width: 7px;
+  opacity: 0.94;
+}
+
+.md-relation-line__path {
+  stroke: var(--md-accent);
+  stroke-width: 2px;
+  stroke-dasharray: 7 4;
+  animation: md-relation-flow 0.85s linear infinite;
+}
+
+.md-relation-marker {
+  fill: var(--md-accent);
+}
+
+.md-relation-line__label rect {
+  fill: var(--md-panel-solid);
+  stroke: color-mix(in srgb, var(--md-accent) 42%, var(--md-line));
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.md-relation-line__label text {
+  fill: var(--md-text);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  font-size: 9px;
+  font-weight: 720;
+  paint-order: stroke;
+  stroke: var(--md-panel-solid);
+  stroke-width: 2px;
+}
+
+.md-relation-view-bar {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 65;
+  display: flex;
+  max-width: calc(100% - 32px);
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px 7px 10px;
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, var(--md-accent) 34%, var(--md-line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--md-panel-solid) 94%, transparent);
+  box-shadow: var(--md-shadow-small);
+  backdrop-filter: blur(14px);
+}
+
+.md-relation-view-bar__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--md-accent);
+  background: var(--md-accent-soft);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.md-relation-view-bar > span:nth-child(2) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.md-relation-view-bar strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-relation-view-bar small {
+  color: var(--md-muted);
+  font-size: 8px;
+}
+
+.md-relation-view-bar button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--md-line);
+  border-radius: 8px;
+  color: var(--md-text);
+  background: var(--md-surface);
+  font-size: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.md-relation-view-bar button:hover {
+  border-color: var(--md-accent);
+  color: var(--md-accent);
+}
+
+@keyframes md-relation-flow {
+  to {
+    stroke-dashoffset: -11;
+  }
+}

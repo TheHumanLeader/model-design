@@ -1,17 +1,20 @@
 <script setup lang="ts" vapor>
-import { computed } from 'vue'
-import { MODEL_FIELD_TYPES } from '../types'
+import { computed, ref, watch } from 'vue'
+import { MODEL_FIELD_TYPES, MODEL_RELATION_TYPES } from '../types'
 import type {
   FieldPatch,
   GroupPatch,
   ModelField,
+  ModelFieldRelation,
   ModelGroup,
   ModelNode,
   ModelPatch,
+  ModelRelationType,
 } from '../types'
 
 const props = defineProps<{
   models: ModelNode[]
+  allModels: ModelNode[]
   group: ModelGroup | null
   groups: ModelGroup[]
   groupMemberCount: number
@@ -30,8 +33,17 @@ const emit = defineEmits<{
   deleteGroup: [groupId: string]
   ungroup: [groupId: string]
   fitGroup: [groupId: string]
+  viewRelations: [modelId: string]
 }>()
 
+const relationTypeLabels: Record<ModelRelationType, string> = {
+  'one-to-one': '一对一（1 : 1）',
+  'one-to-many': '一对多（1 : N）',
+  'many-to-one': '多对一（N : 1）',
+  'many-to-many': '多对多（N : N）',
+}
+
+const tagDraft = ref('')
 const model = computed(() => (props.models.length === 1 ? props.models[0] ?? null : null))
 const isMultiple = computed(() => props.models.length > 1)
 
@@ -43,8 +55,15 @@ const modelPath = computed(() => {
   return group ? `根画板 / ${group.name} / ${current.name}` : `根画板 / ${current.name}`
 })
 
+watch(
+  () => model.value?.id,
+  () => {
+    tagDraft.value = ''
+  },
+)
+
 function textValue(event: Event): string {
-  return (event.target as HTMLInputElement | HTMLTextAreaElement).value
+  return (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
 }
 
 function checkedValue(event: Event): boolean {
@@ -68,6 +87,46 @@ function updateModelGroup(current: ModelNode, event: Event): void {
   emit('updateModel', current.id, {
     groupId: textValue(event) || null,
   })
+}
+
+function addModelTags(current: ModelNode): void {
+  if (props.readonly) return
+
+  const incoming = tagDraft.value
+    .split(/[,，\n]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+
+  if (incoming.length === 0) return
+
+  const currentTags = Array.isArray(current.tags) ? current.tags : []
+  const seen = new Set(currentTags.map((tag) => tag.toLocaleLowerCase()))
+  const nextTags = [...currentTags]
+
+  incoming.forEach((tag) => {
+    const normalized = tag.slice(0, 32)
+    const key = normalized.toLocaleLowerCase()
+    if (!normalized || seen.has(key)) return
+
+    seen.add(key)
+    nextTags.push(normalized)
+  })
+
+  emit('updateModel', current.id, { tags: nextTags.slice(0, 24) })
+  tagDraft.value = ''
+}
+
+function removeModelTag(current: ModelNode, tag: string): void {
+  if (props.readonly) return
+  emit('updateModel', current.id, {
+    tags: (current.tags ?? []).filter((candidate) => candidate !== tag),
+  })
+}
+
+function handleTagKeydown(current: ModelNode, event: KeyboardEvent): void {
+  if (event.key !== 'Enter' && event.key !== ',' && event.key !== '，') return
+  event.preventDefault()
+  addModelTags(current)
 }
 
 function updateGroupText(
@@ -108,6 +167,96 @@ function updateFieldFlag(
     [key]: checkedValue(event),
   })
 }
+
+function relationTarget(field: ModelField): ModelNode | null {
+  const modelId = field.relation?.modelId
+  return modelId
+    ? props.allModels.find((candidate) => candidate.id === modelId) ?? null
+    : null
+}
+
+function updateRelationModel(
+  currentModel: ModelNode,
+  field: ModelField,
+  event: Event,
+): void {
+  const modelId = textValue(event)
+
+  if (!modelId) {
+    emit('updateField', currentModel.id, field.id, { relation: null })
+    return
+  }
+
+  const target = props.allModels.find((candidate) => candidate.id === modelId)
+  if (!target) return
+
+  const previous = field.relation
+  const previousTargetStillValid = previous?.modelId === modelId
+  const preferredField =
+    target.fields.find((candidate) => candidate.primaryKey) ?? target.fields[0] ?? null
+
+  const relation: ModelFieldRelation = {
+    modelId,
+    fieldId: previousTargetStillValid
+      ? previous?.fieldId ?? preferredField?.id ?? null
+      : preferredField?.id ?? null,
+    type: previous?.type ?? 'many-to-one',
+    label: previous?.label ?? '',
+  }
+
+  emit('updateField', currentModel.id, field.id, { relation })
+}
+
+function updateRelationField(
+  currentModel: ModelNode,
+  field: ModelField,
+  event: Event,
+): void {
+  if (!field.relation) return
+
+  emit('updateField', currentModel.id, field.id, {
+    relation: {
+      ...field.relation,
+      fieldId: textValue(event) || null,
+    },
+  })
+}
+
+function updateRelationType(
+  currentModel: ModelNode,
+  field: ModelField,
+  event: Event,
+): void {
+  if (!field.relation) return
+
+  emit('updateField', currentModel.id, field.id, {
+    relation: {
+      ...field.relation,
+      type: textValue(event) as ModelRelationType,
+    },
+  })
+}
+
+function updateRelationLabel(
+  currentModel: ModelNode,
+  field: ModelField,
+  event: Event,
+): void {
+  if (!field.relation) return
+
+  emit(
+    'updateField',
+    currentModel.id,
+    field.id,
+    {
+      relation: {
+        ...field.relation,
+        label: textValue(event),
+      },
+    },
+    `field:${field.id}:relation-label`,
+  )
+}
 </script>
 
 <template>
@@ -128,7 +277,7 @@ function updateFieldFlag(
         <p>
           {{
             model
-              ? '定义模型用途、字段与字段用途'
+              ? '定义模型用途、标签、字段与字段关系'
               : group
                 ? '定义分组用途与模型归属'
                 : isMultiple
@@ -185,6 +334,50 @@ function updateFieldFlag(
             ></textarea>
           </label>
 
+          <div class="md-form-item">
+            <span>
+              模型标签
+              <small>回车或逗号添加</small>
+            </span>
+
+            <div class="md-tag-editor">
+              <div v-if="model.tags?.length" class="md-tag-editor__list">
+                <span
+                  v-for="tag in model.tags || []"
+                  :key="tag"
+                  class="md-tag-editor__tag"
+                >
+                  {{ tag }}
+                  <button
+                    type="button"
+                    :disabled="readonly"
+                    :aria-label="`删除标签 ${tag}`"
+                    @click="removeModelTag(model, tag)"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+
+              <div class="md-tag-editor__control">
+                <input
+                  v-model="tagDraft"
+                  :disabled="readonly"
+                  maxlength="128"
+                  placeholder="例如：核心、账户、只读"
+                  @keydown="handleTagKeydown(model, $event)"
+                />
+                <button
+                  type="button"
+                  :disabled="readonly || !tagDraft.trim()"
+                  @click="addModelTags(model)"
+                >
+                  添加
+                </button>
+              </div>
+            </div>
+          </div>
+
           <label class="md-form-item">
             <span>所属分组</span>
             <select
@@ -222,6 +415,9 @@ function updateFieldFlag(
             >
               <header class="md-field-card__header">
                 <strong>{{ field.name || `字段 ${index + 1}` }}</strong>
+                <span v-if="field.relation" class="md-field-card__relation-badge">
+                  已关联
+                </span>
                 <button
                   type="button"
                   :disabled="readonly"
@@ -314,6 +510,84 @@ function updateFieldFlag(
                   唯一
                 </label>
               </div>
+
+              <section class="md-field-relation">
+                <header class="md-field-relation__title">
+                  <strong>字段关系</strong>
+                  <span>由当前字段指向目标模型</span>
+                </header>
+
+                <div class="md-field-relation__grid">
+                  <label class="md-form-item md-form-item--wide">
+                    <span>关系模型</span>
+                    <select
+                      :value="field.relation?.modelId || ''"
+                      :disabled="readonly"
+                      @change="updateRelationModel(model, field, $event)"
+                    >
+                      <option value="">无关系</option>
+                      <option
+                        v-for="candidate in allModels"
+                        :key="candidate.id"
+                        :value="candidate.id"
+                      >
+                        {{ candidate.name }}（{{ candidate.code }}）
+                      </option>
+                    </select>
+                  </label>
+
+                  <template v-if="field.relation">
+                    <label class="md-form-item">
+                      <span>目标字段</span>
+                      <select
+                        :value="field.relation.fieldId || ''"
+                        :disabled="readonly"
+                        @change="updateRelationField(model, field, $event)"
+                      >
+                        <option value="">仅关联模型</option>
+                        <option
+                          v-for="targetField in relationTarget(field)?.fields || []"
+                          :key="targetField.id"
+                          :value="targetField.id"
+                        >
+                          {{ targetField.name }}（{{ targetField.code }}）
+                        </option>
+                      </select>
+                    </label>
+
+                    <label class="md-form-item">
+                      <span>关系类型</span>
+                      <select
+                        :value="field.relation.type"
+                        :disabled="readonly"
+                        @change="updateRelationType(model, field, $event)"
+                      >
+                        <option
+                          v-for="relationType in MODEL_RELATION_TYPES"
+                          :key="relationType"
+                          :value="relationType"
+                        >
+                          {{ relationTypeLabels[relationType] }}
+                        </option>
+                      </select>
+                    </label>
+
+                    <label class="md-form-item md-form-item--wide">
+                      <span>
+                        关系名称
+                        <small>留空时使用字段名称</small>
+                      </span>
+                      <input
+                        :value="field.relation.label || ''"
+                        :disabled="readonly"
+                        maxlength="80"
+                        placeholder="例如：属于、拥有、创建者"
+                        @input="updateRelationLabel(model, field, $event)"
+                      />
+                    </label>
+                  </template>
+                </div>
+              </section>
             </article>
           </div>
 
@@ -330,6 +604,13 @@ function updateFieldFlag(
         <section class="md-inspector__section">
           <h3>模型操作</h3>
           <div class="md-inspector__actions">
+            <button
+              class="is-accent"
+              type="button"
+              @click="emit('viewRelations', model.id)"
+            >
+              查看关系模型
+            </button>
             <button
               type="button"
               :disabled="readonly"

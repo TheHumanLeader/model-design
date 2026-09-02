@@ -13,6 +13,7 @@ import DesignerContextMenu from './DesignerContextMenu.vue'
 import ModelGroupView from './ModelGroup.vue'
 import ModelInspector from './ModelInspector.vue'
 import ModelNodeView from './ModelNode.vue'
+import ModelRelations from './ModelRelations.vue'
 import {
   DEFAULT_GRID_SIZE,
   GROUP_HEADER_HEIGHT,
@@ -37,14 +38,16 @@ import {
   normalizeDocument,
   snap,
 } from '../core'
+import { MODEL_RELATION_TYPE_LABELS } from '../types'
 import type {
   DesignerMenuItem,
   DesignerSelection,
-  DesignerTheme,
   FieldPatch,
   GroupPatch,
   ModelDesignDocument,
   ModelDesignerApi,
+  ModelField,
+  ModelFieldRelation,
   ModelGroup,
   ModelNode,
   ModelPatch,
@@ -97,10 +100,27 @@ interface HistoryEntry {
   label: string
 }
 
+interface RelationEdge {
+  id: string
+  sourceModelId: string
+  sourceField: ModelField
+  targetModelId: string
+  targetField: ModelField | null
+  relation: ModelFieldRelation
+}
+
+interface RelationLine {
+  id: string
+  path: string
+  label: string
+  labelX: number
+  labelY: number
+  labelWidth: number
+}
+
 const props = withDefaults(
   defineProps<{
     readonly?: boolean
-    theme?: DesignerTheme
     height?: string | number
     showToolbar?: boolean
     showInspector?: boolean
@@ -111,7 +131,6 @@ const props = withDefaults(
   }>(),
   {
     readonly: false,
-    theme: 'light',
     height: '100%',
     showToolbar: true,
     showInspector: true,
@@ -133,6 +152,18 @@ const emit = defineEmits<{
   error: [error: Error]
 }>()
 
+try {
+  const normalizedInitialDocument = normalizeDocument(designDocument.value)
+  if (!isSameDocument(designDocument.value, normalizedInitialDocument)) {
+    designDocument.value = normalizedInitialDocument
+  }
+} catch (error) {
+  const normalizedError =
+    error instanceof Error ? error : new Error('初始模型设计文档无效')
+  designDocument.value = createEmptyDocument()
+  emit('error', normalizedError)
+}
+
 const rootRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLElement | null>(null)
 
@@ -149,12 +180,10 @@ const resizeHeight = ref(0)
 const dropTargetGroupId = ref<string | null>(null)
 const spacePressed = ref(false)
 const toastMessage = ref('')
-const prefersDark = ref(false)
-const themeOverride = ref<'light' | 'dark' | null>(null)
+const relationFocusModelId = ref<string | null>(null)
 const past = shallowRef<HistoryEntry[]>([])
 const future = shallowRef<HistoryEntry[]>([])
 
-let mediaQuery: MediaQueryList | null = null
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let lastMergeKey: string | null = null
 let lastMergeAt = 0
@@ -173,14 +202,7 @@ const rootStyle = computed(() => ({
   height: typeof props.height === 'number' ? `${props.height}px` : props.height,
 }))
 
-const effectiveTheme = computed<'light' | 'dark'>(() => {
-  if (themeOverride.value) return themeOverride.value
-  if (props.theme === 'auto') return prefersDark.value ? 'dark' : 'light'
-  return props.theme
-})
-
 const rootClass = computed(() => ({
-  'md-model-designer--dark': effectiveTheme.value === 'dark',
   'md-model-designer--readonly': props.readonly,
   'md-model-designer--without-toolbar': !props.showToolbar,
   'md-model-designer--without-status': !props.showStatusBar,
@@ -225,10 +247,88 @@ const isEmpty = computed(
     designDocument.value.models.length === 0 &&
     designDocument.value.groups.length === 0,
 )
+const relationEdges = computed<RelationEdge[]>(() => {
+  const modelsById = new Map(
+    designDocument.value.models.map((model) => [model.id, model]),
+  )
+  const edges: RelationEdge[] = []
+
+  designDocument.value.models.forEach((sourceModel) => {
+    sourceModel.fields.forEach((sourceField) => {
+      const relation = sourceField.relation
+      if (!relation) return
+
+      const targetModel = modelsById.get(relation.modelId)
+      if (!targetModel) return
+
+      const targetField = relation.fieldId
+        ? targetModel.fields.find((field) => field.id === relation.fieldId) ?? null
+        : null
+
+      edges.push({
+        id: `${sourceModel.id}:${sourceField.id}`,
+        sourceModelId: sourceModel.id,
+        sourceField,
+        targetModelId: targetModel.id,
+        targetField,
+        relation,
+      })
+    })
+  })
+
+  return edges
+})
+const relationCountByModelId = computed(() => {
+  const counts = new Map<string, number>()
+
+  relationEdges.value.forEach((edge) => {
+    counts.set(edge.sourceModelId, (counts.get(edge.sourceModelId) ?? 0) + 1)
+    if (edge.targetModelId !== edge.sourceModelId) {
+      counts.set(edge.targetModelId, (counts.get(edge.targetModelId) ?? 0) + 1)
+    }
+  })
+
+  return counts
+})
+const relationFocusModel = computed(() =>
+  relationFocusModelId.value
+    ? designDocument.value.models.find(
+        (model) => model.id === relationFocusModelId.value,
+      ) ?? null
+    : null,
+)
+const focusedRelationEdges = computed(() => {
+  const modelId = relationFocusModelId.value
+  if (!modelId) return []
+
+  return relationEdges.value.filter(
+    (edge) =>
+      edge.sourceModelId === modelId ||
+      edge.targetModelId === modelId,
+  )
+})
+const relationVisibleModelIds = computed(() => {
+  const ids = new Set<string>()
+  const modelId = relationFocusModelId.value
+  if (!modelId) return ids
+
+  ids.add(modelId)
+  focusedRelationEdges.value.forEach((edge) => {
+    ids.add(edge.sourceModelId)
+    ids.add(edge.targetModelId)
+  })
+  return ids
+})
+const relationLines = computed<RelationLine[]>(() =>
+  focusedRelationEdges.value
+    .map(createRelationLine)
+    .filter((line): line is RelationLine => Boolean(line)),
+)
+const relationViewActive = computed(() => relationFocusModel.value !== null)
 
 const menuItems = computed<DesignerMenuItem[]>(() => {
   if (menu.target === 'canvas') {
-    return [
+    const items: DesignerMenuItem[] = [
       { id: 'create-model', label: '创建模型', hint: '双击' },
       { id: 'create-group', label: '创建空分组' },
       {
@@ -239,6 +339,17 @@ const menuItems = computed<DesignerMenuItem[]>(() => {
       },
       { id: 'fit-view', label: '适配全部内容', separatorBefore: true },
     ]
+
+    if (relationViewActive.value) {
+      items.unshift({
+        id: 'clear-relation-view',
+        label: '退出关系查看',
+        separatorBefore: false,
+      })
+      if (items[1]) items[1].separatorBefore = true
+    }
+
+    return items
   }
 
   if (menu.target === 'model') {
@@ -252,8 +363,20 @@ const menuItems = computed<DesignerMenuItem[]>(() => {
     return [
       { id: 'configure-model', label: '配置模型' },
       {
+        id:
+          relationFocusModelId.value === model?.id
+            ? 'clear-relation-view'
+            : 'view-relations',
+        label:
+          relationFocusModelId.value === model?.id
+            ? '退出关系查看'
+            : '查看关系模型',
+        separatorBefore: true,
+      },
+      {
         id: 'duplicate-model',
         label: selectedIds.length > 1 ? `复制所选 ${selectedIds.length} 个模型` : '复制模型',
+        separatorBefore: true,
       },
       {
         id: 'group-selected',
@@ -288,16 +411,17 @@ const menuItems = computed<DesignerMenuItem[]>(() => {
 })
 
 watch(
-  () => props.theme,
-  () => {
-    themeOverride.value = null
-  },
-)
-
-watch(
   () => designDocument.value,
   () => {
     cleanSelection()
+    if (
+      relationFocusModelId.value &&
+      !designDocument.value.models.some(
+        (model) => model.id === relationFocusModelId.value,
+      )
+    ) {
+      relationFocusModelId.value = null
+    }
   },
   { deep: false },
 )
@@ -390,6 +514,52 @@ function clearSelection(): void {
   selectedModelIds.value = new Set()
   selectedGroupId.value = null
   emitSelectionChange()
+}
+
+function viewRelations(modelId: string): void {
+  const model = designDocument.value.models.find((candidate) => candidate.id === modelId)
+  if (!model) return
+
+  relationFocusModelId.value = modelId
+  setModelSelection([modelId])
+  closeMenu()
+
+  const count = relationEdges.value.filter(
+    (edge) => edge.sourceModelId === modelId || edge.targetModelId === modelId,
+  ).length
+  notify(count > 0 ? `已展示 ${count} 条模型关系` : '该模型暂无字段关系')
+  void nextTick(() => fitRelationView())
+}
+
+function clearRelationView(): void {
+  if (!relationFocusModelId.value) return
+
+  relationFocusModelId.value = null
+  notify('已退出关系查看')
+}
+
+function modelRelationState(
+  modelId: string,
+): 'none' | 'focus' | 'related' | 'dimmed' {
+  const focusId = relationFocusModelId.value
+  if (!focusId) return 'none'
+  if (modelId === focusId) return 'focus'
+  return relationVisibleModelIds.value.has(modelId) ? 'related' : 'dimmed'
+}
+
+function modelRelationCount(modelId: string): number {
+  return relationCountByModelId.value.get(modelId) ?? 0
+}
+
+function groupRelationState(groupId: string): 'none' | 'context' | 'dimmed' {
+  if (!relationFocusModelId.value) return 'none'
+
+  const hasVisibleMember = designDocument.value.models.some(
+    (model) =>
+      model.groupId === groupId &&
+      relationVisibleModelIds.value.has(model.id),
+  )
+  return hasVisibleMember ? 'context' : 'dimmed'
 }
 
 function cleanSelection(): void {
@@ -546,6 +716,9 @@ function patchModel(modelId: string, patch: ModelPatch, mergeKey?: string): void
   if (!model) return
 
   Object.assign(model, patch)
+  if (patch.tags !== undefined) {
+    model.tags = normalizeModelTags(patch.tags)
+  }
   if (patch.groupId !== undefined) {
     model.groupId =
       patch.groupId && next.groups.some((group) => group.id === patch.groupId)
@@ -578,6 +751,21 @@ function patchField(
 
   if (!field) return
   Object.assign(field, patch)
+  if (field.relation) {
+    const targetModel = next.models.find(
+      (model) => model.id === field.relation?.modelId,
+    )
+    if (!targetModel) {
+      field.relation = null
+    } else if (
+      field.relation.fieldId &&
+      !targetModel.fields.some(
+        (targetField) => targetField.id === field.relation?.fieldId,
+      )
+    ) {
+      field.relation.fieldId = null
+    }
+  }
   commitDocument(next, '已更新字段', mergeKey)
 }
 
@@ -589,6 +777,16 @@ function deleteField(modelId: string, fieldId: string): void {
   if (!model) return
 
   model.fields = model.fields.filter((field) => field.id !== fieldId)
+  next.models.forEach((candidate) => {
+    candidate.fields.forEach((field) => {
+      if (
+        field.relation?.modelId === modelId &&
+        field.relation.fieldId === fieldId
+      ) {
+        field.relation.fieldId = null
+      }
+    })
+  })
   commitDocument(next, '已删除字段')
 }
 
@@ -601,6 +799,9 @@ function duplicateModels(modelIds: string[]): string[] {
 
   const next = cloneDocument(designDocument.value)
   const createdIds: string[] = []
+  const modelIdMap = new Map<string, string>()
+  const fieldIdMaps = new Map<string, Map<string, string>>()
+  const copies: Array<{ source: ModelNode; copy: ModelNode }> = []
 
   sourceModels.forEach((source, index) => {
     const position = findFreeModelPosition(
@@ -623,9 +824,35 @@ function duplicateModels(modelIds: string[]): string[] {
         id: undefined,
       })),
     })
+    const fieldIdMap = new Map<string, string>()
+
+    source.fields.forEach((field, fieldIndex) => {
+      const copiedField = copy.fields[fieldIndex]
+      if (copiedField) fieldIdMap.set(field.id, copiedField.id)
+    })
 
     next.models.push(copy)
     createdIds.push(copy.id)
+    modelIdMap.set(source.id, copy.id)
+    fieldIdMaps.set(source.id, fieldIdMap)
+    copies.push({ source, copy })
+  })
+
+  copies.forEach(({ source, copy }) => {
+    source.fields.forEach((sourceField, fieldIndex) => {
+      const copiedField = copy.fields[fieldIndex]
+      const relation = copiedField?.relation
+      const sourceRelation = sourceField.relation
+      if (!copiedField || !relation || !sourceRelation) return
+
+      const copiedTargetModelId = modelIdMap.get(sourceRelation.modelId)
+      if (!copiedTargetModelId) return
+
+      relation.modelId = copiedTargetModelId
+      relation.fieldId = sourceRelation.fieldId
+        ? fieldIdMaps.get(sourceRelation.modelId)?.get(sourceRelation.fieldId) ?? null
+        : null
+    })
   })
 
   commitDocument(next, `已复制 ${createdIds.length} 个模型`)
@@ -640,6 +867,13 @@ function deleteModels(modelIds: string[]): void {
   const next = cloneDocument(designDocument.value)
   const removedCount = next.models.filter((model) => idSet.has(model.id)).length
   next.models = next.models.filter((model) => !idSet.has(model.id))
+  next.models.forEach((model) => {
+    model.fields.forEach((field) => {
+      if (field.relation && idSet.has(field.relation.modelId)) {
+        field.relation = null
+      }
+    })
+  })
 
   if (removedCount === 0) return
 
@@ -793,6 +1027,123 @@ function groupHeight(group: ModelGroup): number {
   return gesture.value?.kind === 'resize-group' && gesture.value.groupId === group.id
     ? resizeHeight.value
     : group.height
+}
+
+function createRelationLine(edge: RelationEdge): RelationLine | null {
+  const source = designDocument.value.models.find(
+    (model) => model.id === edge.sourceModelId,
+  )
+  const target = designDocument.value.models.find(
+    (model) => model.id === edge.targetModelId,
+  )
+  if (!source || !target) return null
+
+  const sourceRect = {
+    x: modelX(source),
+    y: modelY(source),
+    width: source.width,
+    height: modelHeight(source),
+  }
+  const targetRect = {
+    x: modelX(target),
+    y: modelY(target),
+    width: target.width,
+    height: modelHeight(target),
+  }
+
+  const sourceName = edge.sourceField.name || edge.sourceField.code || '关系字段'
+  const relationName = (edge.relation.label ?? '').trim() || sourceName
+  const targetFieldName = edge.targetField?.name || edge.targetField?.code
+  const targetName = targetFieldName
+    ? `${target.name}.${targetFieldName}`
+    : target.name
+  const relationType = MODEL_RELATION_TYPE_LABELS[edge.relation.type] ?? '关联'
+  const label = `${relationName} · ${relationType} → ${targetName}`
+  const labelWidth = Math.min(340, Math.max(106, [...label].length * 8.4 + 24))
+
+  if (source.id === target.id) {
+    const startX = sourceRect.x + sourceRect.width
+    const startY = sourceRect.y + Math.min(92, sourceRect.height * 0.42)
+    const endY = Math.min(sourceRect.y + sourceRect.height - 34, startY + 74)
+    const loopX = startX + 104
+
+    return {
+      id: edge.id,
+      path: `M ${startX} ${startY} C ${loopX} ${startY - 52}, ${loopX} ${endY + 52}, ${startX} ${endY}`,
+      label,
+      labelX: loopX - 10,
+      labelY: (startY + endY) / 2,
+      labelWidth,
+    }
+  }
+
+  const sourceCenterX = sourceRect.x + sourceRect.width / 2
+  const sourceCenterY = sourceRect.y + sourceRect.height / 2
+  const targetCenterX = targetRect.x + targetRect.width / 2
+  const targetCenterY = targetRect.y + targetRect.height / 2
+  const dx = targetCenterX - sourceCenterX
+  const dy = targetCenterY - sourceCenterY
+
+  let startX: number
+  let startY: number
+  let endX: number
+  let endY: number
+  let control1X: number
+  let control1Y: number
+  let control2X: number
+  let control2Y: number
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const direction = dx >= 0 ? 1 : -1
+    startX = direction > 0 ? sourceRect.x + sourceRect.width : sourceRect.x
+    startY = sourceCenterY
+    endX = direction > 0 ? targetRect.x : targetRect.x + targetRect.width
+    endY = targetCenterY
+    const curve = Math.min(180, Math.max(14, Math.abs(endX - startX) * 0.45))
+    control1X = startX + direction * curve
+    control1Y = startY
+    control2X = endX - direction * curve
+    control2Y = endY
+  } else {
+    const direction = dy >= 0 ? 1 : -1
+    startX = sourceCenterX
+    startY = direction > 0 ? sourceRect.y + sourceRect.height : sourceRect.y
+    endX = targetCenterX
+    endY = direction > 0 ? targetRect.y : targetRect.y + targetRect.height
+    const curve = Math.min(180, Math.max(14, Math.abs(endY - startY) * 0.45))
+    control1X = startX
+    control1Y = startY + direction * curve
+    control2X = endX
+    control2Y = endY - direction * curve
+  }
+
+  const labelX = cubicPoint(startX, control1X, control2X, endX, 0.5)
+  const labelY = cubicPoint(startY, control1Y, control2Y, endY, 0.5)
+
+  return {
+    id: edge.id,
+    path: `M ${startX} ${startY} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endX} ${endY}`,
+    label,
+    labelX,
+    labelY,
+    labelWidth,
+  }
+}
+
+function cubicPoint(
+  start: number,
+  control1: number,
+  control2: number,
+  end: number,
+  t: number,
+): number {
+  const inverse = 1 - t
+  return (
+    inverse ** 3 * start +
+    3 * inverse ** 2 * t * control1 +
+    3 * inverse * t ** 2 * control2 +
+    t ** 3 * end
+  )
 }
 
 function isModelDragging(modelId: string): boolean {
@@ -1149,6 +1500,37 @@ function fitView(): void {
   viewY.value = rect.height / 2 - (bounds.y + bounds.height / 2) * nextZoom
 }
 
+function fitRelationView(): void {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect || !relationFocusModelId.value) return
+
+  const models = designDocument.value.models.filter((model) =>
+    relationVisibleModelIds.value.has(model.id),
+  )
+  if (models.length === 0) return
+
+  const minX = Math.min(...models.map((model) => model.x))
+  const minY = Math.min(...models.map((model) => model.y))
+  const maxX = Math.max(...models.map((model) => model.x + model.width))
+  const maxY = Math.max(...models.map((model) => model.y + modelHeight(model)))
+  const width = Math.max(1, maxX - minX)
+  const height = Math.max(1, maxY - minY)
+  const padding = 110
+  const nextZoom = clamp(
+    Math.min(
+      (rect.width - padding * 2) / width,
+      (rect.height - padding * 2) / height,
+      1.15,
+    ),
+    props.minZoom,
+    props.maxZoom,
+  )
+
+  zoom.value = nextZoom
+  viewX.value = rect.width / 2 - (minX + width / 2) * nextZoom
+  viewY.value = rect.height / 2 - (minY + height / 2) * nextZoom
+}
+
 function screenToWorld(clientX: number, clientY: number): Point {
   const rect = canvasRef.value?.getBoundingClientRect()
   if (!rect) return { x: 0, y: 0 }
@@ -1217,6 +1599,12 @@ function handleMenuAction(action: string): void {
       break
     case 'configure-model':
       if (targetId) setModelSelection([targetId])
+      break
+    case 'view-relations':
+      if (targetId) viewRelations(targetId)
+      break
+    case 'clear-relation-view':
+      clearRelationView()
       break
     case 'duplicate-model': {
       const ids =
@@ -1340,10 +1728,6 @@ function getDocument(): ModelDesignDocument {
   return cloneDocument(designDocument.value)
 }
 
-function toggleTheme(): void {
-  themeOverride.value = effectiveTheme.value === 'dark' ? 'light' : 'dark'
-}
-
 function handleKeyDown(event: KeyboardEvent): void {
   if (isEditableTarget(event.target)) return
 
@@ -1354,6 +1738,13 @@ function handleKeyDown(event: KeyboardEvent): void {
   }
 
   if (event.key === 'Escape') {
+    if (relationViewActive.value) {
+      clearRelationView()
+      closeMenu()
+      cancelGesture()
+      return
+    }
+
     closeMenu()
     cancelGesture()
     clearSelection()
@@ -1396,6 +1787,23 @@ function isEditableTarget(target: EventTarget | null): boolean {
   )
 }
 
+function normalizeModelTags(tags: string[] | undefined): string[] {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  const source = tags ?? []
+
+  source.forEach((item) => {
+    const tag = item.trim().slice(0, 32)
+    const key = tag.toLocaleLowerCase()
+    if (!tag || seen.has(key)) return
+
+    seen.add(key)
+    normalized.push(tag)
+  })
+
+  return normalized.slice(0, 24)
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
@@ -1406,6 +1814,8 @@ const api: ModelDesignerApi = {
   groupSelected,
   deleteSelected,
   clearSelection,
+  viewRelations,
+  clearRelationView,
   undo,
   redo,
   fitView,
@@ -1419,13 +1829,11 @@ const api: ModelDesignerApi = {
 defineExpose(api)
 
 onMounted(() => {
-  if (!designDocument.value || !Array.isArray(designDocument.value.models)) {
+  try {
+    designDocument.value = normalizeDocument(designDocument.value)
+  } catch {
     designDocument.value = createEmptyDocument()
   }
-
-  mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-  prefersDark.value = mediaQuery.matches
-  mediaQuery.addEventListener('change', handleThemeMediaChange)
 
   window.addEventListener('pointermove', handleGlobalPointerMove)
   window.addEventListener('pointerup', finishGesture)
@@ -1440,7 +1848,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  mediaQuery?.removeEventListener('change', handleThemeMediaChange)
   window.removeEventListener('pointermove', handleGlobalPointerMove)
   window.removeEventListener('pointerup', finishGesture)
   window.removeEventListener('pointercancel', cancelGesture)
@@ -1451,10 +1858,6 @@ onBeforeUnmount(() => {
 
   if (toastTimer) clearTimeout(toastTimer)
 })
-
-function handleThemeMediaChange(event: MediaQueryListEvent): void {
-  prefersDark.value = event.matches
-}
 </script>
 
 <template>
@@ -1577,14 +1980,6 @@ function handleThemeMediaChange(event: MediaQueryListEvent): void {
         >
           ↑ 导出
         </button>
-        <button
-          class="md-toolbar__button is-icon"
-          type="button"
-          :title="effectiveTheme === 'dark' ? '切换浅色主题' : '切换深色主题'"
-          @click="toggleTheme"
-        >
-          {{ effectiveTheme === 'dark' ? '☀' : '☾' }}
-        </button>
       </div>
     </header>
 
@@ -1616,11 +2011,17 @@ function handleThemeMediaChange(event: MediaQueryListEvent): void {
             :drop-target="dropTargetGroupId === group.id"
             :moving="isGroupMoving(group.id)"
             :resizing="isGroupResizing(group.id)"
+            :relation-state="groupRelationState(group.id)"
             @select="selectGroup"
             @movestart="startGroupDrag"
             @resizestart="startGroupResize"
             @contextmenu="openGroupMenu"
             @doubleclick="handleGroupDoubleClick"
+          />
+
+          <ModelRelations
+            v-if="relationViewActive"
+            :lines="relationLines"
           />
 
           <ModelNodeView
@@ -1631,11 +2032,28 @@ function handleThemeMediaChange(event: MediaQueryListEvent): void {
             :y="modelY(model)"
             :selected="selectedModelIds.has(model.id)"
             :dragging="isModelDragging(model.id)"
+            :relation-state="modelRelationState(model.id)"
+            :relation-count="modelRelationCount(model.id)"
             @pointerdown="startModelDrag"
             @contextmenu="openModelMenu"
             @menu="openModelMenu"
             @doubleclick="handleModelDoubleClick"
           />
+        </div>
+
+        <div v-if="relationFocusModel" class="md-relation-view-bar">
+          <span class="md-relation-view-bar__icon" aria-hidden="true">↗</span>
+          <span>
+            <strong>{{ relationFocusModel.name }}</strong>
+            <small>
+              {{
+                focusedRelationEdges.length
+                  ? `${focusedRelationEdges.length} 条直接关系`
+                  : '暂无字段关系'
+              }}
+            </small>
+          </span>
+          <button type="button" @click="clearRelationView">退出关系查看</button>
         </div>
 
         <div v-if="isEmpty" class="md-empty-state">
@@ -1676,6 +2094,7 @@ function handleThemeMediaChange(event: MediaQueryListEvent): void {
       <ModelInspector
         v-if="showInspector"
         :models="selectedModels"
+        :all-models="designDocument.models"
         :group="selectedGroup"
         :groups="designDocument.groups"
         :group-member-count="selectedGroupMemberCount"
@@ -1698,6 +2117,7 @@ function handleThemeMediaChange(event: MediaQueryListEvent): void {
       <span>模型 {{ designDocument.models.length }}</span>
       <span>分组 {{ designDocument.groups.length }}</span>
       <span>已选 {{ selectedCount }}</span>
+      <span v-if="relationFocusModel">关系 {{ focusedRelationEdges.length }}</span>
       <span class="md-statusbar__spacer"></span>
       <span>{{ readonly ? '只读模式' : '编辑模式' }}</span>
       <span>{{ zoomPercentage }}</span>
