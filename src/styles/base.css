@@ -1,0 +1,279 @@
+.md-model-designer {
+  --md-bg: #f4f6fa;
+  --md-panel: rgba(255, 255, 255, 0.94);
+  --md-panel-solid: #ffffff;
+  --md-surface: #f8faff;
+  --md-surface-strong: #eef2f8;
+  --md-text: #182033;
+  --md-muted: #778195;
+  --md-faint: #a6afbf;
+  --md-line: #dce2ec;
+  --md-line-strong: #c9d1df;
+  --md-accent: #5368f4;
+  --md-accent-2: #725cf4;
+  --md-accent-soft: #eef1ff;
+  --md-accent-border: rgba(83, 104, 244, 0.44);
+  --md-danger: #df445d;
+  --md-danger-soft: #fff0f2;
+  --md-success: #22a26a;
+  --md-group-fill: rgba(83, 104, 244, 0.04);
+  --md-group-border: rgba(83, 104, 244, 0.34);
+  --md-grid-small: rgba(83, 104, 244, 0.07);
+  --md-grid-large: rgba(83, 104, 244, 0.12);
+  --md-shadow: 0 16px 44px rgba(23, 32, 53, 0.12);
+  --md-shadow-small: 0 7px 22px rgba(23, 32, 53, 0.1);
+  position: relative;
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr) 28px;
+  width: 100%;
+  min-width: 0;
+  min-height: 480px;
+  overflow: hidden;
+  color: var(--md-text);
+  background: var(--md-bg);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  line-height: 1.45;
+  color-scheme: light;
+  outline: none;
+}
+
+.md-model-designer--dark {
+  --md-bg: #111722;
+  --md-panel: rgba(24, 32, 47, 0.95);
+  --md-panel-solid: #18202f;
+  --md-surface: #1d2637;
+  --md-surface-strong: #263147;
+  --md-text: #edf2ff;
+  --md-muted: #a1adc3;
+  --md-faint: #748098;
+  --md-line: #303b50;
+  --md-line-strong: #46536d;
+  --md-accent: #8790ff;
+  --md-accent-2: #a883ff;
+  --md-accent-soft: rgba(111, 122, 255, 0.16);
+  --md-accent-border: rgba(144, 152, 255, 0.48);
+  --md-danger: #ff6f86;
+  --md-danger-soft: rgba(255, 99, 124, 0.14);
+  --md-success: #49ca8e;
+  --md-group-fill: rgba(119, 128, 255, 0.055);
+  --md-group-border: rgba(144, 152, 255, 0.38);
+  --md-grid-small: rgba(151, 162, 255, 0.055);
+  --md-grid-large: rgba(151, 162, 255, 0.105);
+  --md-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  --md-shadow-small: 0 8px 24px rgba(0, 0, 0, 0.26);
+  color-scheme: dark;
+}
+
+.md-model-designer--without-toolbar {
+  grid-template-rows: minmax(0, 1fr) 28px;
+}
+
+.md-model-designer--without-status {
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+
+.md-model-designer--without-toolbar.md-model-designer--without-status {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.md-model-designer *,
+.md-model-designer *::before,
+.md-model-designer *::after {
+  box-sizing: border-box;
+}
+
+.md-model-designer button,
+.md-model-designer input,
+.md-model-designer textarea,
+.md-model-designer select {
+  font: inherit;
+}
+
+.md-model-designer button {
+  color: inherit;
+}
+
+.md-toolbar {
+  position: relative;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 14px 0 18px;
+  border-bottom: 1px solid var(--md-line);
+  background: var(--md-panel);
+  backdrop-filter: blur(18px);
+}
+
+.md-toolbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 214px;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+
+.md-toolbar__brand > span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.md-toolbar__brand strong {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.md-toolbar__brand small {
+  margin-top: 1px;
+  color: var(--md-muted);
+  font-size: 10px;
+}
+
+.md-toolbar__logo {
+  display: grid;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  color: #fff;
+  background: linear-gradient(145deg, var(--md-accent), var(--md-accent-2));
+  box-shadow: 0 8px 18px rgba(83, 104, 244, 0.24);
+}
+
+.md-toolbar__logo svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.md-toolbar__divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 28px;
+  background: var(--md-line);
+}
+
+.md-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.md-toolbar__spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.md-toolbar__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.md-toolbar__button:hover:not(:disabled) {
+  border-color: var(--md-line);
+  background: var(--md-surface);
+}
+
+.md-toolbar__button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.md-toolbar__button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.md-toolbar__button.is-primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--md-accent), var(--md-accent-2));
+  box-shadow: 0 8px 18px rgba(83, 104, 244, 0.2);
+}
+
+.md-toolbar__button.is-primary:hover:not(:disabled) {
+  border-color: transparent;
+  filter: brightness(1.04);
+}
+
+.md-toolbar__button.is-accent {
+  color: var(--md-accent);
+  background: var(--md-accent-soft);
+}
+
+.md-toolbar__button.is-icon {
+  padding: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.md-toolbar__button.is-danger:hover:not(:disabled) {
+  color: var(--md-danger);
+  border-color: transparent;
+  background: var(--md-danger-soft);
+}
+
+.md-toolbar__vapor-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--md-line);
+  border-radius: 999px;
+  color: var(--md-muted);
+  background: var(--md-surface);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.md-toolbar__vapor-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--md-success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-success) 17%, transparent);
+}
+
+.md-workspace {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.md-model-designer--without-inspector .md-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
