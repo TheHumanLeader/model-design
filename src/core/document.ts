@@ -4,15 +4,17 @@ import type {
   GroupPatch,
   ModelDesignDocument,
   ModelField,
+  ModelFieldRelation,
   ModelGroup,
   ModelNode,
   ModelPatch,
+  ModelRelationType,
   Point,
   Rect,
 } from '../types'
 
 export const MODEL_NODE_WIDTH = 270
-export const MODEL_NODE_BASE_HEIGHT = 144
+export const MODEL_NODE_BASE_HEIGHT = 167
 export const GROUP_HEADER_HEIGHT = 48
 export const MIN_GROUP_WIDTH = 336
 export const MIN_GROUP_HEIGHT = 220
@@ -57,6 +59,7 @@ export function createField(seed: Partial<ModelField> = {}): ModelField {
     required: Boolean(seed.required),
     primaryKey: Boolean(seed.primaryKey),
     unique: Boolean(seed.unique),
+    relation: normalizeFieldRelation(seed.relation),
   }
 }
 
@@ -68,6 +71,7 @@ export function createModel(seed: ModelSeed = {}): ModelNode {
     name,
     code: asText(seed.code) || normalizeCode(name, 'model'),
     purpose: asText(seed.purpose),
+    tags: normalizeTags(seed.tags),
     x: finiteNumber(seed.x, 0),
     y: finiteNumber(seed.y, 0),
     width: Math.max(220, finiteNumber(seed.width, MODEL_NODE_WIDTH)),
@@ -95,49 +99,16 @@ export function createDemoDocument(): ModelDesignDocument {
     purpose: '账号、角色与权限领域模型',
     x: 96,
     y: 84,
-    width: 680,
+    width: 900,
     height: 470,
-  })
-
-  const user = createModel({
-    name: '用户模型',
-    code: 'user',
-    purpose: '记录用户身份与基础资料',
-    x: 130,
-    y: 164,
-    groupId: group.id,
-    fields: [
-      {
-        name: '用户标识',
-        code: 'user_id',
-        type: 'id',
-        purpose: '用户唯一标识',
-        required: true,
-        primaryKey: true,
-        unique: true,
-      },
-      {
-        name: '用户名',
-        code: 'username',
-        type: 'string',
-        purpose: '用户登录名',
-        required: true,
-        unique: true,
-      },
-      {
-        name: '显示名称',
-        code: 'display_name',
-        type: 'string',
-        purpose: '界面展示名称',
-      },
-    ],
   })
 
   const permission = createModel({
     name: '权限模型',
     code: 'permission',
     purpose: '记录系统中的权限定义',
-    x: 430,
+    tags: ['权限', '安全'],
+    x: 610,
     y: 164,
     groupId: group.id,
     fields: [
@@ -161,10 +132,78 @@ export function createDemoDocument(): ModelDesignDocument {
     ],
   })
 
+  const permissionIdField = permission.fields[0]
+  const user = createModel({
+    name: '用户模型',
+    code: 'user',
+    purpose: '记录用户身份与基础资料',
+    tags: ['账户', '身份'],
+    x: 130,
+    y: 164,
+    groupId: group.id,
+    fields: [
+      {
+        name: '用户标识',
+        code: 'user_id',
+        type: 'id',
+        purpose: '用户唯一标识',
+        required: true,
+        primaryKey: true,
+        unique: true,
+      },
+      {
+        name: '用户名',
+        code: 'username',
+        type: 'string',
+        purpose: '用户登录名',
+        required: true,
+        unique: true,
+      },
+      {
+        name: '拥有权限',
+        code: 'permission_ids',
+        type: 'relation',
+        purpose: '用户拥有的权限集合',
+        relation: {
+          modelId: permission.id,
+          fieldId: permissionIdField?.id ?? null,
+          type: 'many-to-many',
+          label: '拥有权限',
+        },
+      },
+    ],
+  })
+
+  const auditLog = createModel({
+    name: '审计日志',
+    code: 'audit_log',
+    purpose: '记录独立的系统操作日志，用于演示无关模型透明化',
+    tags: ['审计', '日志'],
+    x: 850,
+    y: 184,
+    fields: [
+      {
+        name: '日志标识',
+        code: 'log_id',
+        type: 'id',
+        required: true,
+        primaryKey: true,
+        unique: true,
+      },
+      {
+        name: '操作内容',
+        code: 'content',
+        type: 'text',
+        purpose: '记录操作摘要',
+        required: true,
+      },
+    ],
+  })
+
   return {
     version: 1,
     groups: [group],
-    models: [user, permission],
+    models: [user, permission, auditLog],
   }
 }
 
@@ -201,6 +240,7 @@ export function normalizeDocument(value: unknown): ModelDesignDocument {
         name: asText(model.name) || undefined,
         code: asText(model.code),
         purpose: asText(model.purpose),
+        tags: normalizeTags(model.tags),
         x: finiteNumber(model.x, 0),
         y: finiteNumber(model.y, 0),
         width: finiteNumber(model.width, MODEL_NODE_WIDTH),
@@ -214,13 +254,17 @@ export function normalizeDocument(value: unknown): ModelDesignDocument {
           required: Boolean(field.required),
           primaryKey: Boolean(field.primaryKey ?? field.primary),
           unique: Boolean(field.unique),
+          relation: normalizeFieldRelation(field.relation),
         })),
       })
     })
 
+  const normalizedModels = deduplicateIds(models, 'model')
+  cleanInvalidRelations(normalizedModels)
+
   return {
     version: 1,
-    models: deduplicateIds(models, 'model'),
+    models: normalizedModels,
     groups: deduplicateIds(groups, 'group'),
   }
 }
@@ -261,12 +305,15 @@ export function snap(value: number, gridSize = DEFAULT_GRID_SIZE): number {
 
 export function modelHeight(model: ModelNode): number {
   const visibleFieldCount = Math.min(model.fields.length, 4)
+  const tagHeight = (model.tags?.length ?? 0) > 0 ? 34 : 0
+  const fieldAreaHeight =
+    visibleFieldCount === 0
+      ? 41
+      : 12 +
+        visibleFieldCount * 31 +
+        (model.fields.length > 4 ? 34 : 0)
 
-  if (visibleFieldCount === 0) {
-    return MODEL_NODE_BASE_HEIGHT
-  }
-
-  return MODEL_NODE_BASE_HEIGHT + visibleFieldCount * 31 + (model.fields.length > 4 ? 26 : 0)
+  return 58 + 43 + tagHeight + fieldAreaHeight + 25
 }
 
 export function modelRect(model: ModelNode): Rect {
@@ -416,6 +463,7 @@ export function updateModel(
   if (patch.name !== undefined) model.name = patch.name
   if (patch.code !== undefined) model.code = patch.code
   if (patch.purpose !== undefined) model.purpose = patch.purpose
+  if (patch.tags !== undefined) model.tags = normalizeTags(patch.tags)
   if (patch.groupId !== undefined) {
     model.groupId =
       patch.groupId && next.groups.some((group) => group.id === patch.groupId)
@@ -624,6 +672,77 @@ function asText(value: unknown): string {
 function asNullableText(value: unknown): string | null {
   const text = asText(value).trim()
   return text || null
+}
+
+function normalizeTags(value: unknown): string[] {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/[,，]/)
+      : []
+  const seen = new Set<string>()
+  const tags: string[] = []
+
+  source.forEach((item) => {
+    const tag = asText(item).trim().slice(0, 32)
+    const key = tag.toLocaleLowerCase()
+    if (!tag || seen.has(key)) return
+
+    seen.add(key)
+    tags.push(tag)
+  })
+
+  return tags.slice(0, 24)
+}
+
+function normalizeFieldRelation(value: unknown): ModelFieldRelation | null {
+  if (!isRecord(value)) return null
+
+  const modelId = asText(value.modelId).trim()
+  if (!modelId) return null
+
+  return {
+    modelId,
+    fieldId: asNullableText(value.fieldId),
+    type: normalizeRelationType(value.type),
+    label: asText(value.label).trim().slice(0, 80),
+  }
+}
+
+function normalizeRelationType(value: unknown): ModelRelationType {
+  switch (value) {
+    case 'one-to-one':
+    case 'one-to-many':
+    case 'many-to-one':
+    case 'many-to-many':
+      return value
+    default:
+      return 'many-to-one'
+  }
+}
+
+function cleanInvalidRelations(models: ModelNode[]): void {
+  const modelsById = new Map(models.map((model) => [model.id, model]))
+
+  models.forEach((model) => {
+    model.fields.forEach((field) => {
+      const relation = field.relation
+      if (!relation) return
+
+      const target = modelsById.get(relation.modelId)
+      if (!target) {
+        field.relation = null
+        return
+      }
+
+      if (
+        relation.fieldId &&
+        !target.fields.some((candidate) => candidate.id === relation.fieldId)
+      ) {
+        relation.fieldId = null
+      }
+    })
+  })
 }
 
 function finiteNumber(value: unknown, fallback: number): number {

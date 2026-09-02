@@ -4,7 +4,7 @@ import ModelDesigner from '../components/ModelDesigner.vue'
 import { createDemoDocument, normalizeDocument } from '../core'
 import type { ModelDesignDocument } from '../types'
 
-const STORAGE_KEY = 'model-design-playground-v1'
+const STORAGE_KEY = 'model-design-playground-v2'
 
 const documentModel = shallowRef<ModelDesignDocument>(loadDocument())
 
@@ -29,7 +29,6 @@ function saveDocument(document: ModelDesignDocument): void {
 <template>
   <ModelDesigner
     v-model="documentModel"
-    theme="auto"
     height="100dvh"
     @change="saveDocument"
   />

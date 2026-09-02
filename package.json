@@ -1,11 +1,11 @@
 {
   "name": "model-design",
-  "version": "0.1.0-next.0",
-  "description": "A high-performance visual model designer built with Vue 3.6 Vapor Mode.",
+  "version": "0.1.0-next.1",
+  "description": "A high-performance visual data model and relationship designer built with Vue 3.6 Vapor Mode.",
   "type": "module",
   "license": "MIT",
   "author": "TheHumanLeader",
-  "homepage": "https://github.com/TheHumanLeader/model-design#readme",
+  "homepage": "https://thehumanleader.github.io/model-design/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TheHumanLeader/model-design.git"
@@ -19,7 +19,9 @@
     "model-designer",
     "schema-designer",
     "visual-editor",
-    "typescript"
+    "typescript",
+    "data-modeling",
+    "relationships"
   ],
   "files": [
     "dist"

@@ -8,6 +8,8 @@ const props = defineProps<{
   y: number
   selected: boolean
   dragging: boolean
+  relationState: 'none' | 'focus' | 'related' | 'dimmed'
+  relationCount: number
 }>()
 
 const emit = defineEmits<{
@@ -25,6 +27,8 @@ const nodeStyle = computed(() => ({
 
 const visibleFields = computed(() => props.model.fields.slice(0, 4))
 const hiddenFieldCount = computed(() => Math.max(0, props.model.fields.length - 4))
+const visibleTags = computed(() => (props.model.tags ?? []).slice(0, 3))
+const hiddenTagCount = computed(() => Math.max(0, (props.model.tags ?? []).length - 3))
 
 function handlePointerDown(event: PointerEvent): void {
   emit('pointerdown', props.model.id, event)
@@ -45,6 +49,9 @@ function handleMenu(event: MouseEvent): void {
     :class="{
       'is-selected': selected,
       'is-dragging': dragging,
+      'is-relation-focus': relationState === 'focus',
+      'is-relation-related': relationState === 'related',
+      'is-relation-dimmed': relationState === 'dimmed',
     }"
     :style="nodeStyle"
     :data-model-id="model.id"
@@ -86,6 +93,11 @@ function handleMenu(event: MouseEvent): void {
       {{ model.purpose || '点击模型，在右侧配置模型用途与字段。' }}
     </p>
 
+    <div v-if="visibleTags.length" class="md-model-node__tags">
+      <span v-for="tag in visibleTags" :key="tag" class="md-model-node__tag">{{ tag }}</span>
+      <span v-if="hiddenTagCount" class="md-model-node__tag is-more">+{{ hiddenTagCount }}</span>
+    </div>
+
     <div class="md-model-node__fields">
       <template v-if="visibleFields.length">
         <div
@@ -95,6 +107,7 @@ function handleMenu(event: MouseEvent): void {
         >
           <span class="md-model-node__field-name">
             <span v-if="field.primaryKey" class="md-model-node__key" title="主键">◆</span>
+            <span v-if="field.relation" class="md-model-node__relation-icon" title="关系字段">↗</span>
             {{ field.name || '未命名字段' }}
             <span v-if="field.required" class="md-model-node__required">*</span>
           </span>
@@ -113,7 +126,8 @@ function handleMenu(event: MouseEvent): void {
 
     <footer class="md-model-node__footer">
       <span>{{ model.groupId ? '已加入分组' : '根画板' }}</span>
-      <span>{{ model.fields.length }} 个字段</span>
+      <span v-if="relationCount">{{ relationCount }} 个关系</span>
+      <span v-else>{{ model.fields.length }} 个字段</span>
     </footer>
   </article>
 </template>

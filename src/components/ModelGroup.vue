@@ -13,6 +13,7 @@ const props = defineProps<{
   dropTarget: boolean
   moving: boolean
   resizing: boolean
+  relationState: 'none' | 'context' | 'dimmed'
 }>()
 
 const emit = defineEmits<{
@@ -54,6 +55,8 @@ function handleResizeStart(event: PointerEvent): void {
       'is-drop-target': dropTarget,
       'is-moving': moving,
       'is-resizing': resizing,
+      'is-relation-context': relationState === 'context',
+      'is-relation-dimmed': relationState === 'dimmed',
     }"
     :style="groupStyle"
     :data-group-id="group.id"

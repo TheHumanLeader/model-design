@@ -13,8 +13,30 @@ export const MODEL_FIELD_TYPES = [
   'custom',
 ] as const
 
+export const MODEL_RELATION_TYPES = [
+  'one-to-one',
+  'one-to-many',
+  'many-to-one',
+  'many-to-many',
+] as const
+
 export type BuiltInModelFieldType = (typeof MODEL_FIELD_TYPES)[number]
 export type ModelFieldType = BuiltInModelFieldType | (string & {})
+export type ModelRelationType = (typeof MODEL_RELATION_TYPES)[number]
+
+export const MODEL_RELATION_TYPE_LABELS: Record<ModelRelationType, string> = {
+  'one-to-one': '一对一',
+  'one-to-many': '一对多',
+  'many-to-one': '多对一',
+  'many-to-many': '多对多',
+}
+
+export interface ModelFieldRelation {
+  modelId: string
+  fieldId: string | null
+  type: ModelRelationType
+  label: string
+}
 
 export interface ModelField {
   id: string
@@ -25,6 +47,7 @@ export interface ModelField {
   required: boolean
   primaryKey: boolean
   unique: boolean
+  relation: ModelFieldRelation | null
 }
 
 export interface ModelNode {
@@ -33,6 +56,7 @@ export interface ModelNode {
   name: string
   code: string
   purpose: string
+  tags: string[]
   x: number
   y: number
   width: number
@@ -68,6 +92,8 @@ export interface ModelDesignerApi {
   groupSelected(): string | null
   deleteSelected(): void
   clearSelection(): void
+  viewRelations(modelId: string): void
+  clearRelationView(): void
   undo(): void
   redo(): void
   fitView(): void
@@ -88,8 +114,6 @@ export interface Rect extends Point {
   height: number
 }
 
-export type DesignerTheme = 'light' | 'dark' | 'auto'
-
 export interface DesignerMenuItem {
   id: string
   label: string
@@ -103,6 +127,7 @@ export interface ModelPatch {
   name?: string
   code?: string
   purpose?: string
+  tags?: string[]
   groupId?: string | null
 }
 
@@ -119,4 +144,5 @@ export interface FieldPatch {
   required?: boolean
   primaryKey?: boolean
   unique?: boolean
+  relation?: ModelFieldRelation | null
 }

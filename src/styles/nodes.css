@@ -3,7 +3,7 @@
   z-index: 5;
   display: flex;
   width: var(--md-node-width);
-  min-height: 144px;
+  min-height: 167px;
   flex-direction: column;
   overflow: hidden;
   transform: translate3d(var(--md-node-x), var(--md-node-y), 0);
@@ -16,7 +16,8 @@
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease,
-    opacity 0.16s ease;
+    opacity 0.2s ease,
+    filter 0.2s ease;
 }
 
 .md-model-node:hover {
@@ -36,6 +37,28 @@
   opacity: 0.92;
   transition: none;
   cursor: grabbing;
+}
+
+.md-model-node.is-relation-focus {
+  z-index: 9;
+  border-color: var(--md-accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--md-accent) 20%, transparent),
+    var(--md-shadow);
+}
+
+.md-model-node.is-relation-related {
+  z-index: 8;
+  border-color: color-mix(in srgb, var(--md-accent) 58%, var(--md-line));
+  box-shadow: var(--md-shadow);
+}
+
+.md-model-node.is-relation-dimmed {
+  z-index: 2;
+  opacity: 0.055;
+  filter: grayscale(1);
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .md-model-node__accent {
@@ -150,6 +173,37 @@
   white-space: nowrap;
 }
 
+.md-model-node__tags {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 13px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--md-line);
+  background: color-mix(in srgb, var(--md-accent-soft) 34%, transparent);
+}
+
+.md-model-node__tag {
+  max-width: 82px;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--md-accent) 20%, var(--md-line));
+  border-radius: 999px;
+  color: var(--md-accent);
+  background: var(--md-panel-solid);
+  font-size: 8px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-model-node__tag.is-more {
+  flex: 0 0 auto;
+  color: var(--md-muted);
+  border-color: var(--md-line);
+}
+
 .md-model-node__fields {
   min-height: 41px;
   padding: 6px 13px;
@@ -191,6 +245,13 @@
   margin-right: 4px;
   color: #e5a31f;
   font-size: 8px;
+}
+
+.md-model-node__relation-icon {
+  margin-right: 4px;
+  color: var(--md-accent);
+  font-size: 10px;
+  font-weight: 900;
 }
 
 .md-model-node__required {
