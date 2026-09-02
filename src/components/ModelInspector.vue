@@ -1,16 +1,20 @@
 <script setup lang="ts" vapor>
 import { computed, ref, watch } from 'vue'
-import { MODEL_FIELD_TYPES, MODEL_RELATION_TYPES } from '../types'
+import ModelEventsPanel from './ModelEventsPanel.vue'
+import ModelFieldsPanel from './ModelFieldsPanel.vue'
+import ModelTriggersPanel from './ModelTriggersPanel.vue'
 import type {
+  EventParameterPatch,
   FieldPatch,
   GroupPatch,
-  ModelField,
-  ModelFieldRelation,
+  ModelEventPatch,
   ModelGroup,
   ModelNode,
   ModelPatch,
-  ModelRelationType,
+  ModelTriggerPatch,
 } from '../types'
+
+type ModelTab = 'base' | 'fields' | 'events' | 'triggers'
 
 const props = defineProps<{
   models: ModelNode[]
@@ -27,6 +31,26 @@ const emit = defineEmits<{
   addField: [modelId: string]
   updateField: [modelId: string, fieldId: string, patch: FieldPatch, mergeKey?: string]
   deleteField: [modelId: string, fieldId: string]
+  addEvent: [modelId: string]
+  updateEvent: [modelId: string, eventId: string, patch: ModelEventPatch, mergeKey?: string]
+  deleteEvent: [modelId: string, eventId: string]
+  addEventParameter: [modelId: string, eventId: string]
+  updateEventParameter: [
+    modelId: string,
+    eventId: string,
+    parameterId: string,
+    patch: EventParameterPatch,
+    mergeKey?: string,
+  ]
+  deleteEventParameter: [modelId: string, eventId: string, parameterId: string]
+  addTrigger: [modelId: string]
+  updateTrigger: [
+    modelId: string,
+    triggerId: string,
+    patch: ModelTriggerPatch,
+    mergeKey?: string,
+  ]
+  deleteTrigger: [modelId: string, triggerId: string]
   duplicateModels: [modelIds: string[]]
   deleteModels: [modelIds: string[]]
   groupModels: [modelIds: string[]]
@@ -36,14 +60,8 @@ const emit = defineEmits<{
   viewRelations: [modelId: string]
 }>()
 
-const relationTypeLabels: Record<ModelRelationType, string> = {
-  'one-to-one': '一对一（1 : 1）',
-  'one-to-many': '一对多（1 : N）',
-  'many-to-one': '多对一（N : 1）',
-  'many-to-many': '多对多（N : N）',
-}
-
 const tagDraft = ref('')
+const activeTab = ref<ModelTab>('fields')
 const model = computed(() => (props.models.length === 1 ? props.models[0] ?? null : null))
 const isMultiple = computed(() => props.models.length > 1)
 
@@ -64,10 +82,6 @@ watch(
 
 function textValue(event: Event): string {
   return (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
-}
-
-function checkedValue(event: Event): boolean {
-  return (event.target as HTMLInputElement).checked
 }
 
 function updateModelText(
@@ -99,9 +113,8 @@ function addModelTags(current: ModelNode): void {
 
   if (incoming.length === 0) return
 
-  const currentTags = Array.isArray(current.tags) ? current.tags : []
-  const seen = new Set(currentTags.map((tag) => tag.toLocaleLowerCase()))
-  const nextTags = [...currentTags]
+  const seen = new Set((current.tags ?? []).map((tag) => tag.toLocaleLowerCase()))
+  const nextTags = [...(current.tags ?? [])]
 
   incoming.forEach((tag) => {
     const normalized = tag.slice(0, 32)
@@ -118,6 +131,7 @@ function addModelTags(current: ModelNode): void {
 
 function removeModelTag(current: ModelNode, tag: string): void {
   if (props.readonly) return
+
   emit('updateModel', current.id, {
     tags: (current.tags ?? []).filter((candidate) => candidate !== tag),
   })
@@ -142,120 +156,65 @@ function updateGroupText(
   )
 }
 
-function updateFieldText(
-  currentModel: ModelNode,
-  field: ModelField,
-  key: 'name' | 'code' | 'purpose' | 'type',
-  event: Event,
+function forwardFieldUpdate(
+  modelId: string,
+  fieldId: string,
+  patch: FieldPatch,
+  mergeKey?: string,
 ): void {
-  emit(
-    'updateField',
-    currentModel.id,
-    field.id,
-    { [key]: textValue(event) },
-    `field:${field.id}:${key}`,
-  )
+  emit('updateField', modelId, fieldId, patch, mergeKey)
 }
 
-function updateFieldFlag(
-  currentModel: ModelNode,
-  field: ModelField,
-  key: 'required' | 'primaryKey' | 'unique',
-  event: Event,
-): void {
-  emit('updateField', currentModel.id, field.id, {
-    [key]: checkedValue(event),
-  })
+function forwardFieldDelete(modelId: string, fieldId: string): void {
+  emit('deleteField', modelId, fieldId)
 }
 
-function relationTarget(field: ModelField): ModelNode | null {
-  const modelId = field.relation?.modelId
-  return modelId
-    ? props.allModels.find((candidate) => candidate.id === modelId) ?? null
-    : null
+function forwardEventUpdate(
+  modelId: string,
+  eventId: string,
+  patch: ModelEventPatch,
+  mergeKey?: string,
+): void {
+  emit('updateEvent', modelId, eventId, patch, mergeKey)
 }
 
-function updateRelationModel(
-  currentModel: ModelNode,
-  field: ModelField,
-  event: Event,
-): void {
-  const modelId = textValue(event)
-
-  if (!modelId) {
-    emit('updateField', currentModel.id, field.id, { relation: null })
-    return
-  }
-
-  const target = props.allModels.find((candidate) => candidate.id === modelId)
-  if (!target) return
-
-  const previous = field.relation
-  const previousTargetStillValid = previous?.modelId === modelId
-  const preferredField =
-    target.fields.find((candidate) => candidate.primaryKey) ?? target.fields[0] ?? null
-
-  const relation: ModelFieldRelation = {
-    modelId,
-    fieldId: previousTargetStillValid
-      ? previous?.fieldId ?? preferredField?.id ?? null
-      : preferredField?.id ?? null,
-    type: previous?.type ?? 'many-to-one',
-    label: previous?.label ?? '',
-  }
-
-  emit('updateField', currentModel.id, field.id, { relation })
+function forwardEventDelete(modelId: string, eventId: string): void {
+  emit('deleteEvent', modelId, eventId)
 }
 
-function updateRelationField(
-  currentModel: ModelNode,
-  field: ModelField,
-  event: Event,
-): void {
-  if (!field.relation) return
-
-  emit('updateField', currentModel.id, field.id, {
-    relation: {
-      ...field.relation,
-      fieldId: textValue(event) || null,
-    },
-  })
+function forwardAddEventParameter(modelId: string, eventId: string): void {
+  emit('addEventParameter', modelId, eventId)
 }
 
-function updateRelationType(
-  currentModel: ModelNode,
-  field: ModelField,
-  event: Event,
+function forwardParameterUpdate(
+  modelId: string,
+  eventId: string,
+  parameterId: string,
+  patch: EventParameterPatch,
+  mergeKey?: string,
 ): void {
-  if (!field.relation) return
-
-  emit('updateField', currentModel.id, field.id, {
-    relation: {
-      ...field.relation,
-      type: textValue(event) as ModelRelationType,
-    },
-  })
+  emit('updateEventParameter', modelId, eventId, parameterId, patch, mergeKey)
 }
 
-function updateRelationLabel(
-  currentModel: ModelNode,
-  field: ModelField,
-  event: Event,
+function forwardDeleteEventParameter(
+  modelId: string,
+  eventId: string,
+  parameterId: string,
 ): void {
-  if (!field.relation) return
+  emit('deleteEventParameter', modelId, eventId, parameterId)
+}
 
-  emit(
-    'updateField',
-    currentModel.id,
-    field.id,
-    {
-      relation: {
-        ...field.relation,
-        label: textValue(event),
-      },
-    },
-    `field:${field.id}:relation-label`,
-  )
+function forwardTriggerUpdate(
+  modelId: string,
+  triggerId: string,
+  patch: ModelTriggerPatch,
+  mergeKey?: string,
+): void {
+  emit('updateTrigger', modelId, triggerId, patch, mergeKey)
+}
+
+function forwardTriggerDelete(modelId: string, triggerId: string): void {
+  emit('deleteTrigger', modelId, triggerId)
 }
 </script>
 
@@ -266,23 +225,23 @@ function updateRelationLabel(
         <strong>
           {{
             model
-              ? '模型配置'
+              ? model.name || '未命名模型'
               : group
-                ? '分组配置'
+                ? group.name || '未命名分组'
                 : isMultiple
-                  ? '批量选择'
+                  ? `已选择 ${models.length} 个模型`
                   : '模型设计器'
           }}
         </strong>
         <p>
           {{
             model
-              ? '定义模型用途、标签、字段与字段关系'
+              ? model.code || 'unnamed_model'
               : group
-                ? '定义分组用途与模型归属'
+                ? `${groupMemberCount} 个模型`
                 : isMultiple
-                  ? `已选择 ${models.length} 个模型`
-                  : '选择画板中的模型或分组进行配置'
+                  ? '批量移动、成组或删除'
+                  : '选择画板内容后进行配置'
           }}
         </p>
       </div>
@@ -291,392 +250,226 @@ function updateRelationLabel(
       <span v-else-if="group" class="md-inspector__type">分组</span>
     </header>
 
-    <div class="md-inspector__body">
-      <template v-if="model">
-        <section class="md-inspector__section">
-          <h3>模型信息</h3>
+    <template v-if="model">
+      <nav class="md-inspector-tabs" aria-label="模型配置分类">
+        <button
+          type="button"
+          :class="{ 'is-active': activeTab === 'base' }"
+          @click="activeTab = 'base'"
+        >
+          基础
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-active': activeTab === 'fields' }"
+          @click="activeTab = 'fields'"
+        >
+          字段 <i>{{ model.fields.length }}</i>
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-active': activeTab === 'events' }"
+          @click="activeTab = 'events'"
+        >
+          事件 <i>{{ model.events.length }}</i>
+        </button>
+        <button
+          type="button"
+          :class="{ 'is-active': activeTab === 'triggers' }"
+          @click="activeTab = 'triggers'"
+        >
+          触发器 <i>{{ model.triggers.length }}</i>
+        </button>
+      </nav>
 
-          <label class="md-form-item">
-            <span>模型名称</span>
-            <input
-              :value="model.name"
-              :disabled="readonly"
-              placeholder="例如：用户模型"
-              @input="updateModelText(model, 'name', $event)"
-            />
-          </label>
+      <div class="md-inspector__body">
+        <section v-if="activeTab === 'base'" class="md-inspector__section is-compact">
+          <div class="md-compact-grid">
+            <label class="md-compact-field">
+              <span>名称</span>
+              <input
+                :value="model.name"
+                :disabled="readonly"
+                @input="updateModelText(model, 'name', $event)"
+              />
+            </label>
 
-          <label class="md-form-item">
-            <span>
-              模型标识
-              <small>用于代码、表名或接口标识</small>
-            </span>
-            <input
-              :value="model.code"
-              :disabled="readonly"
-              spellcheck="false"
-              placeholder="例如：user"
-              @input="updateModelText(model, 'code', $event)"
-            />
-          </label>
+            <label class="md-compact-field">
+              <span>标识</span>
+              <input
+                :value="model.code"
+                :disabled="readonly"
+                spellcheck="false"
+                @input="updateModelText(model, 'code', $event)"
+              />
+            </label>
 
-          <label class="md-form-item">
-            <span>
-              模型用途
-              <small>该模型负责表达什么</small>
-            </span>
-            <textarea
-              :value="model.purpose"
-              :disabled="readonly"
-              rows="3"
-              placeholder="描述模型的职责、边界与使用场景"
-              @input="updateModelText(model, 'purpose', $event)"
-            ></textarea>
-          </label>
+            <label class="md-compact-field is-wide">
+              <span>用途</span>
+              <textarea
+                :value="model.purpose"
+                :disabled="readonly"
+                rows="2"
+                placeholder="模型职责、边界与使用场景"
+                @input="updateModelText(model, 'purpose', $event)"
+              ></textarea>
+            </label>
 
-          <div class="md-form-item">
-            <span>
-              模型标签
-              <small>回车或逗号添加</small>
-            </span>
-
-            <div class="md-tag-editor">
-              <div v-if="model.tags?.length" class="md-tag-editor__list">
-                <span
-                  v-for="tag in model.tags || []"
-                  :key="tag"
-                  class="md-tag-editor__tag"
+            <label class="md-compact-field is-wide">
+              <span>所属分组</span>
+              <select
+                :value="model.groupId || ''"
+                :disabled="readonly"
+                @change="updateModelGroup(model, $event)"
+              >
+                <option value="">根画板</option>
+                <option
+                  v-for="candidate in groups"
+                  :key="candidate.id"
+                  :value="candidate.id"
                 >
-                  {{ tag }}
-                  <button
-                    type="button"
-                    :disabled="readonly"
-                    :aria-label="`删除标签 ${tag}`"
-                    @click="removeModelTag(model, tag)"
-                  >
-                    ×
-                  </button>
-                </span>
-              </div>
-
-              <div class="md-tag-editor__control">
-                <input
-                  v-model="tagDraft"
-                  :disabled="readonly"
-                  maxlength="128"
-                  placeholder="例如：核心、账户、只读"
-                  @keydown="handleTagKeydown(model, $event)"
-                />
-                <button
-                  type="button"
-                  :disabled="readonly || !tagDraft.trim()"
-                  @click="addModelTags(model)"
-                >
-                  添加
-                </button>
-              </div>
-            </div>
+                  {{ candidate.name }}
+                </option>
+              </select>
+            </label>
           </div>
 
-          <label class="md-form-item">
-            <span>所属分组</span>
-            <select
-              :value="model.groupId || ''"
-              :disabled="readonly"
-              @change="updateModelGroup(model, $event)"
-            >
-              <option value="">根画板</option>
-              <option
-                v-for="candidate in groups"
-                :key="candidate.id"
-                :value="candidate.id"
+          <section class="md-compact-subsection">
+            <header>
+              <strong>标签</strong>
+              <small>{{ model.tags.length }} 个</small>
+            </header>
+
+            <div v-if="model.tags.length" class="md-tag-editor__list">
+              <span v-for="tag in model.tags" :key="tag" class="md-tag-editor__tag">
+                {{ tag }}
+                <button
+                  type="button"
+                  :disabled="readonly"
+                  @click="removeModelTag(model, tag)"
+                >
+                  ×
+                </button>
+              </span>
+            </div>
+
+            <div class="md-tag-editor__control">
+              <input
+                v-model="tagDraft"
+                :disabled="readonly"
+                maxlength="128"
+                placeholder="输入标签，回车或逗号添加"
+                @keydown="handleTagKeydown(model, $event)"
+              />
+              <button
+                type="button"
+                :disabled="readonly || !tagDraft.trim()"
+                @click="addModelTags(model)"
               >
-                {{ candidate.name }}
-              </option>
-            </select>
-          </label>
+                添加
+              </button>
+            </div>
+          </section>
 
           <div class="md-inspector__path" :title="modelPath">
             {{ modelPath }}
           </div>
         </section>
 
-        <section class="md-inspector__section">
-          <div class="md-inspector__section-title">
-            <h3>字段配置</h3>
-            <span>{{ model.fields.length }} 个字段</span>
+        <ModelFieldsPanel
+          v-else-if="activeTab === 'fields'"
+          :model="model"
+          :all-models="allModels"
+          :readonly="readonly"
+          @add="emit('addField', $event)"
+          @update="forwardFieldUpdate"
+          @delete="forwardFieldDelete"
+        />
+
+        <ModelEventsPanel
+          v-else-if="activeTab === 'events'"
+          :model="model"
+          :readonly="readonly"
+          @add="emit('addEvent', $event)"
+          @update="forwardEventUpdate"
+          @delete="forwardEventDelete"
+          @add-parameter="forwardAddEventParameter"
+          @update-parameter="forwardParameterUpdate"
+          @delete-parameter="forwardDeleteEventParameter"
+        />
+
+        <ModelTriggersPanel
+          v-else
+          :model="model"
+          :readonly="readonly"
+          @add="emit('addTrigger', $event)"
+          @update="forwardTriggerUpdate"
+          @delete="forwardTriggerDelete"
+        />
+      </div>
+
+      <footer class="md-inspector__quick-actions">
+        <button type="button" @click="emit('viewRelations', model.id)">
+          关系
+        </button>
+        <button
+          type="button"
+          :disabled="readonly"
+          @click="emit('duplicateModels', [model.id])"
+        >
+          复制
+        </button>
+        <button
+          class="is-danger"
+          type="button"
+          :disabled="readonly"
+          @click="emit('deleteModels', [model.id])"
+        >
+          删除
+        </button>
+      </footer>
+    </template>
+
+    <div v-else class="md-inspector__body">
+      <template v-if="group">
+        <section class="md-inspector__section is-compact">
+          <div class="md-compact-grid">
+            <label class="md-compact-field is-wide">
+              <span>分组名称</span>
+              <input
+                :value="group.name"
+                :disabled="readonly"
+                @input="updateGroupText(group, 'name', $event)"
+              />
+            </label>
+
+            <label class="md-compact-field is-wide">
+              <span>分组用途</span>
+              <textarea
+                :value="group.purpose"
+                :disabled="readonly"
+                rows="3"
+                @input="updateGroupText(group, 'purpose', $event)"
+              ></textarea>
+            </label>
           </div>
-
-          <div v-if="model.fields.length" class="md-field-list">
-            <article
-              v-for="(field, index) in model.fields"
-              :key="field.id"
-              class="md-field-card"
-            >
-              <header class="md-field-card__header">
-                <strong>{{ field.name || `字段 ${index + 1}` }}</strong>
-                <span v-if="field.relation" class="md-field-card__relation-badge">
-                  已关联
-                </span>
-                <button
-                  type="button"
-                  :disabled="readonly"
-                  title="删除字段"
-                  @click="emit('deleteField', model.id, field.id)"
-                >
-                  删除
-                </button>
-              </header>
-
-              <div class="md-field-card__grid">
-                <label class="md-form-item">
-                  <span>字段名称</span>
-                  <input
-                    :value="field.name"
-                    :disabled="readonly"
-                    placeholder="例如：用户标识"
-                    @input="updateFieldText(model, field, 'name', $event)"
-                  />
-                </label>
-
-                <label class="md-form-item">
-                  <span>字段标识</span>
-                  <input
-                    :value="field.code"
-                    :disabled="readonly"
-                    spellcheck="false"
-                    placeholder="例如：user_id"
-                    @input="updateFieldText(model, field, 'code', $event)"
-                  />
-                </label>
-
-                <label class="md-form-item">
-                  <span>字段类型</span>
-                  <select
-                    :value="field.type"
-                    :disabled="readonly"
-                    @change="updateFieldText(model, field, 'type', $event)"
-                  >
-                    <option
-                      v-for="fieldType in MODEL_FIELD_TYPES"
-                      :key="fieldType"
-                      :value="fieldType"
-                    >
-                      {{ fieldType }}
-                    </option>
-                  </select>
-                </label>
-
-                <label class="md-form-item md-form-item--wide">
-                  <span>字段用途</span>
-                  <textarea
-                    :value="field.purpose"
-                    :disabled="readonly"
-                    rows="2"
-                    placeholder="描述字段记录的内容与使用目的"
-                    @input="updateFieldText(model, field, 'purpose', $event)"
-                  ></textarea>
-                </label>
-              </div>
-
-              <div class="md-field-card__flags">
-                <label>
-                  <input
-                    type="checkbox"
-                    :checked="field.required"
-                    :disabled="readonly"
-                    @change="updateFieldFlag(model, field, 'required', $event)"
-                  />
-                  必填
-                </label>
-
-                <label>
-                  <input
-                    type="checkbox"
-                    :checked="field.primaryKey"
-                    :disabled="readonly"
-                    @change="updateFieldFlag(model, field, 'primaryKey', $event)"
-                  />
-                  主键
-                </label>
-
-                <label>
-                  <input
-                    type="checkbox"
-                    :checked="field.unique"
-                    :disabled="readonly"
-                    @change="updateFieldFlag(model, field, 'unique', $event)"
-                  />
-                  唯一
-                </label>
-              </div>
-
-              <section class="md-field-relation">
-                <header class="md-field-relation__title">
-                  <strong>字段关系</strong>
-                  <span>由当前字段指向目标模型</span>
-                </header>
-
-                <div class="md-field-relation__grid">
-                  <label class="md-form-item md-form-item--wide">
-                    <span>关系模型</span>
-                    <select
-                      :value="field.relation?.modelId || ''"
-                      :disabled="readonly"
-                      @change="updateRelationModel(model, field, $event)"
-                    >
-                      <option value="">无关系</option>
-                      <option
-                        v-for="candidate in allModels"
-                        :key="candidate.id"
-                        :value="candidate.id"
-                      >
-                        {{ candidate.name }}（{{ candidate.code }}）
-                      </option>
-                    </select>
-                  </label>
-
-                  <template v-if="field.relation">
-                    <label class="md-form-item">
-                      <span>目标字段</span>
-                      <select
-                        :value="field.relation.fieldId || ''"
-                        :disabled="readonly"
-                        @change="updateRelationField(model, field, $event)"
-                      >
-                        <option value="">仅关联模型</option>
-                        <option
-                          v-for="targetField in relationTarget(field)?.fields || []"
-                          :key="targetField.id"
-                          :value="targetField.id"
-                        >
-                          {{ targetField.name }}（{{ targetField.code }}）
-                        </option>
-                      </select>
-                    </label>
-
-                    <label class="md-form-item">
-                      <span>关系类型</span>
-                      <select
-                        :value="field.relation.type"
-                        :disabled="readonly"
-                        @change="updateRelationType(model, field, $event)"
-                      >
-                        <option
-                          v-for="relationType in MODEL_RELATION_TYPES"
-                          :key="relationType"
-                          :value="relationType"
-                        >
-                          {{ relationTypeLabels[relationType] }}
-                        </option>
-                      </select>
-                    </label>
-
-                    <label class="md-form-item md-form-item--wide">
-                      <span>
-                        关系名称
-                        <small>留空时使用字段名称</small>
-                      </span>
-                      <input
-                        :value="field.relation.label || ''"
-                        :disabled="readonly"
-                        maxlength="80"
-                        placeholder="例如：属于、拥有、创建者"
-                        @input="updateRelationLabel(model, field, $event)"
-                      />
-                    </label>
-                  </template>
-                </div>
-              </section>
-            </article>
-          </div>
-
-          <button
-            class="md-dashed-button"
-            type="button"
-            :disabled="readonly"
-            @click="emit('addField', model.id)"
-          >
-            ＋ 添加字段
-          </button>
-        </section>
-
-        <section class="md-inspector__section">
-          <h3>模型操作</h3>
-          <div class="md-inspector__actions">
-            <button
-              class="is-accent"
-              type="button"
-              @click="emit('viewRelations', model.id)"
-            >
-              查看关系模型
-            </button>
-            <button
-              type="button"
-              :disabled="readonly"
-              @click="emit('duplicateModels', [model.id])"
-            >
-              复制模型
-            </button>
-            <button
-              class="is-danger"
-              type="button"
-              :disabled="readonly"
-              @click="emit('deleteModels', [model.id])"
-            >
-              删除模型
-            </button>
-          </div>
-        </section>
-      </template>
-
-      <template v-else-if="group">
-        <section class="md-inspector__section">
-          <h3>分组信息</h3>
-
-          <label class="md-form-item">
-            <span>分组名称</span>
-            <input
-              :value="group.name"
-              :disabled="readonly"
-              placeholder="例如：用户与权限"
-              @input="updateGroupText(group, 'name', $event)"
-            />
-          </label>
-
-          <label class="md-form-item">
-            <span>
-              分组用途
-              <small>该分组包含哪一类模型</small>
-            </span>
-            <textarea
-              :value="group.purpose"
-              :disabled="readonly"
-              rows="4"
-              placeholder="描述分组的职责与边界"
-              @input="updateGroupText(group, 'purpose', $event)"
-            ></textarea>
-          </label>
 
           <div class="md-inspector__metric-grid">
             <div>
-              <span>模型数量</span>
+              <span>模型</span>
               <strong>{{ groupMemberCount }}</strong>
             </div>
             <div>
-              <span>分组宽度</span>
+              <span>宽</span>
               <strong>{{ Math.round(group.width) }}</strong>
             </div>
             <div>
-              <span>分组高度</span>
+              <span>高</span>
               <strong>{{ Math.round(group.height) }}</strong>
             </div>
           </div>
-        </section>
 
-        <section class="md-inspector__section">
-          <h3>分组操作</h3>
-          <div class="md-inspector__actions">
+          <div class="md-inspector__actions is-inline">
             <button
               type="button"
               :disabled="readonly"
@@ -689,7 +482,7 @@ function updateRelationLabel(
               :disabled="readonly"
               @click="emit('ungroup', group.id)"
             >
-              解散分组
+              解散
             </button>
             <button
               class="is-danger"
@@ -697,18 +490,17 @@ function updateRelationLabel(
               :disabled="readonly"
               @click="emit('deleteGroup', group.id)"
             >
-              删除分组
+              删除
             </button>
           </div>
         </section>
       </template>
 
       <template v-else-if="isMultiple">
-        <section class="md-inspector__section">
-          <div class="md-multi-selection">
+        <section class="md-inspector__section is-compact">
+          <div class="md-multi-selection is-compact">
             <span>{{ models.length }}</span>
-            <strong>个模型已被选中</strong>
-            <p>拖动任意已选模型可整体移动，也可将它们组成一个新分组。</p>
+            <strong>个模型已选择</strong>
           </div>
 
           <div class="md-inspector__actions">
@@ -740,23 +532,9 @@ function updateRelationLabel(
 
       <template v-else>
         <section class="md-inspector__empty">
-          <span class="md-inspector__empty-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="3.5" y="3.5" width="7" height="7" rx="2"></rect>
-              <rect x="13.5" y="3.5" width="7" height="7" rx="2"></rect>
-              <rect x="3.5" y="13.5" width="7" height="7" rx="2"></rect>
-              <path d="M17 13.5v7M13.5 17h7"></path>
-            </svg>
-          </span>
-          <strong>从画板开始设计</strong>
-          <p>右键画板创建模型或分组，选择模型后即可配置字段及用途。</p>
-
-          <div class="md-inspector__tips">
-            <span><kbd>右键</kbd> 创建内容</span>
-            <span><kbd>Ctrl</kbd> 多选模型</span>
-            <span><kbd>Space</kbd> 拖动画板</span>
-            <span><kbd>Delete</kbd> 删除所选</span>
-          </div>
+          <span class="md-inspector__empty-icon" aria-hidden="true">⌘</span>
+          <strong>选择模型或分组</strong>
+          <p>模型配置按基础、字段、事件、触发器分栏，避免长表单堆叠。</p>
         </section>
       </template>
     </div>
