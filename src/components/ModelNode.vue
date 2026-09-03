@@ -43,10 +43,6 @@ const visibleFields = computed(() => detailFields.value.slice(0, 6))
 const hiddenFieldCount = computed(() =>
   Math.max(0, detailFields.value.length - visibleFields.value.length),
 )
-const visibleTags = computed(() => (props.model.tags ?? []).slice(0, 2))
-const hiddenTagCount = computed(() =>
-  Math.max(0, (props.model.tags ?? []).length - visibleTags.value.length),
-)
 const nodeHeight = computed(() =>
   props.detail
     ? relationModelHeight(props.model, detailFields.value.length)
@@ -97,11 +93,20 @@ function handleDoubleClick(): void {
     :style="nodeStyle"
     :data-model-id="model.id"
     :data-relation-field-count="detail ? detailFields.length : undefined"
+    :title="detail ? undefined : model.purpose || model.name"
+    :aria-label="`${model.name || '未命名模型'}，${model.code || 'unnamed_model'}`"
     @pointerdown.stop="handlePointerDown"
     @contextmenu.prevent.stop="handleContextMenu"
     @dblclick.stop="handleDoubleClick"
   >
     <header class="md-model-node__header">
+      <span class="md-model-node__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="5" y="4" width="14" height="16" rx="3"></rect>
+          <path d="M8.5 8h7M8.5 12h7M8.5 16h4"></path>
+        </svg>
+      </span>
+
       <span class="md-model-node__identity">
         <strong class="md-model-node__title">{{ model.name || '未命名模型' }}</strong>
         <code class="md-model-node__code">{{ model.code || 'unnamed_model' }}</code>
@@ -129,22 +134,7 @@ function handleDoubleClick(): void {
       </button>
     </header>
 
-    <div v-if="!detail" class="md-model-node__summary">
-      <p class="md-model-node__purpose">
-        {{ model.purpose || '未填写用途' }}
-      </p>
-
-      <span v-if="visibleTags.length" class="md-model-node__tag-list">
-        <span v-for="tag in visibleTags" :key="tag" class="md-model-node__tag">
-          {{ tag }}
-        </span>
-        <span v-if="hiddenTagCount" class="md-model-node__tag is-more">
-          +{{ hiddenTagCount }}
-        </span>
-      </span>
-    </div>
-
-    <div v-else class="md-model-node__fields">
+    <div v-if="detail" class="md-model-node__fields">
       <template v-if="visibleFields.length">
         <div
           v-for="field in visibleFields"
