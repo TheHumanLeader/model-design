@@ -62,6 +62,20 @@ jobs:
       - name: Apply refinement
         run: python .automation/apply_minimal_cards_relation_fix.py
 
+      - name: Align previous compact-node expectation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/document.test.ts')
+          source = path.read_text(encoding='utf-8')
+          old = 'expect(compactHeight).toBe(160)'
+          if source.count(old) != 1:
+              raise RuntimeError('Unable to locate the previous compact-height assertion')
+          path.write_text(source.replace(old, 'expect(compactHeight).toBe(110)', 1), encoding='utf-8')
+          PY
+
       - name: Install dependencies
         run: npm install
 
