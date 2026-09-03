@@ -19,7 +19,7 @@ import type {
 } from '../types'
 
 export const MODEL_NODE_WIDTH = 270
-export const MODEL_NODE_BASE_HEIGHT = 110
+export const MODEL_NODE_BASE_HEIGHT = 88
 export const GROUP_HEADER_HEIGHT = 48
 export const MIN_GROUP_WIDTH = 336
 export const MIN_GROUP_HEIGHT = 220
