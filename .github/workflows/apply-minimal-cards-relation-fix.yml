@@ -1,0 +1,66 @@
+name: Apply minimal cards and relation anchors
+
+on:
+  push:
+    branches:
+      - fix/minimal-cards-relation-anchors
+    paths:
+      - .automation/apply_minimal_cards_relation_fix.py
+      - .github/workflows/apply-minimal-cards-relation-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-minimal-cards-relation-fix
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    name: Apply, test and commit refinement
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/minimal-cards-relation-anchors
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Apply refinement
+        run: python .automation/apply_minimal_cards_relation_fix.py
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Build package
+        run: npm run build
+
+      - name: Build playground
+        run: npm run build:playground
+
+      - name: Verify npm package
+        run: npm run pack:check
+
+      - name: Commit verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .automation
+          rm -f .github/workflows/apply-minimal-cards-relation-fix.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: simplify node cards and anchor relation paths"
+          git push origin HEAD:fix/minimal-cards-relation-anchors
