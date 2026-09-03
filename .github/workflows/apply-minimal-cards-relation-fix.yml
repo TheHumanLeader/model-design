@@ -34,6 +34,31 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
+      - name: Adapt regression-test patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.automation/apply_minimal_cards_relation_fix.py')
+          source = path.read_text(encoding='utf-8')
+          old = '''tests = replace_once(
+              tests,
+              """  modelHeight,
+            normalizeDocument,
+          """,
+              """  modelHeight,
+            normalizeDocument,
+            relationModelHeight,
+          """,
+              "relation height test import",
+          )
+          '''
+          if old not in source:
+              raise RuntimeError('Unable to locate obsolete relation-height import patch')
+          path.write_text(source.replace(old, '', 1), encoding='utf-8')
+          PY
+
       - name: Apply refinement
         run: python .automation/apply_minimal_cards_relation_fix.py
 
