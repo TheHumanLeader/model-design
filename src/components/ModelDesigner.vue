@@ -16,18 +16,22 @@ import ModelNodeView from './ModelNode.vue'
 import ModelRelations from './ModelRelations.vue'
 import {
   DEFAULT_GRID_SIZE,
+  GROUP_CONTENT_TOP,
   GROUP_HEADER_HEIGHT,
+  GROUP_PADDING,
   MIN_GROUP_HEIGHT,
   MIN_GROUP_WIDTH,
   MODEL_NODE_BASE_HEIGHT,
   cloneDocument,
+  constrainModelMovement,
   createEmptyDocument,
+  createEventParameter,
   createField,
   createGroup,
   createGroupAroundModels,
   createModel,
-  ensureGroupContainsMembers,
-  findContainingGroup,
+  createModelEvent,
+  createModelTrigger,
   findFreeModelPosition,
   fitGroupToContents,
   getDocumentBounds,
@@ -42,15 +46,18 @@ import { MODEL_RELATION_TYPE_LABELS } from '../types'
 import type {
   DesignerMenuItem,
   DesignerSelection,
+  EventParameterPatch,
   FieldPatch,
   GroupPatch,
   ModelDesignDocument,
   ModelDesignerApi,
+  ModelEventPatch,
   ModelField,
   ModelFieldRelation,
   ModelGroup,
   ModelNode,
   ModelPatch,
+  ModelTriggerPatch,
   Point,
 } from '../types'
 
@@ -649,11 +656,7 @@ function createModelAt(
   })
 
   next.models.push(model)
-  const finalDocument = groupExists
-    ? ensureGroupContainsMembers(next, groupExists)
-    : next
-
-  commitDocument(finalDocument, '已创建模型')
+  commitDocument(next, '已创建模型')
   setModelSelection([model.id])
   return model.id
 }
@@ -710,20 +713,217 @@ function addField(modelId: string): void {
   commitDocument(next, '已添加字段')
 }
 
+function addModelEvent(modelId: string): void {
+  if (props.readonly) return
+
+  const next = cloneDocument(designDocument.value)
+  const model = next.models.find((candidate) => candidate.id === modelId)
+  if (!model) return
+
+  const name = nextName('事件', model.events.map((item) => item.name))
+  model.events.push(
+    createModelEvent({
+      name,
+      code: normalizeCode(name, `event_${model.events.length + 1}`),
+      returnType: 'void',
+    }),
+  )
+
+  commitDocument(next, '已添加事件')
+}
+
+function addEventParameter(modelId: string, eventId: string): void {
+  if (props.readonly) return
+
+  const next = cloneDocument(designDocument.value)
+  const item = next.models
+    .find((model) => model.id === modelId)
+    ?.events.find((candidate) => candidate.id === eventId)
+  if (!item) return
+
+  const name = nextName('参数', item.parameters.map((parameter) => parameter.name))
+  item.parameters.push(
+    createEventParameter({
+      name,
+      type: 'unknown',
+    }),
+  )
+
+  commitDocument(next, '已添加事件参数')
+}
+
+function addModelTrigger(modelId: string): void {
+  if (props.readonly) return
+
+  const next = cloneDocument(designDocument.value)
+  const model = next.models.find((candidate) => candidate.id === modelId)
+  if (!model) return
+
+  const name = nextName('触发器', model.triggers.map((item) => item.name))
+  model.triggers.push(
+    createModelTrigger({
+      name,
+      source: 'update',
+      timing: 'after',
+      eventId: model.events[0]?.id ?? null,
+      enabled: true,
+    }),
+  )
+
+  commitDocument(next, '已添加触发器')
+}
+
+function patchModelEvent(
+  modelId: string,
+  eventId: string,
+  patch: ModelEventPatch,
+  mergeKey?: string,
+): void {
+  const next = cloneDocument(designDocument.value)
+  const item = next.models
+    .find((model) => model.id === modelId)
+    ?.events.find((candidate) => candidate.id === eventId)
+  if (!item) return
+
+  Object.assign(item, patch)
+  commitDocument(next, '已更新事件', mergeKey)
+}
+
+function patchEventParameter(
+  modelId: string,
+  eventId: string,
+  parameterId: string,
+  patch: EventParameterPatch,
+  mergeKey?: string,
+): void {
+  const next = cloneDocument(designDocument.value)
+  const parameter = next.models
+    .find((model) => model.id === modelId)
+    ?.events.find((item) => item.id === eventId)
+    ?.parameters.find((candidate) => candidate.id === parameterId)
+  if (!parameter) return
+
+  Object.assign(parameter, patch)
+  commitDocument(next, '已更新事件参数', mergeKey)
+}
+
+function patchModelTrigger(
+  modelId: string,
+  triggerId: string,
+  patch: ModelTriggerPatch,
+  mergeKey?: string,
+): void {
+  const next = cloneDocument(designDocument.value)
+  const model = next.models.find((candidate) => candidate.id === modelId)
+  const trigger = model?.triggers.find((candidate) => candidate.id === triggerId)
+  if (!model || !trigger) return
+
+  Object.assign(trigger, patch)
+
+  if (trigger.source !== 'update' && trigger.source !== 'field-change') {
+    trigger.fieldId = null
+  } else if (
+    trigger.fieldId &&
+    !model.fields.some((field) => field.id === trigger.fieldId)
+  ) {
+    trigger.fieldId = null
+  }
+
+  if (
+    trigger.eventId &&
+    !model.events.some((item) => item.id === trigger.eventId)
+  ) {
+    trigger.eventId = null
+  }
+
+  commitDocument(next, '已更新触发器', mergeKey)
+}
+
+function deleteModelEvent(modelId: string, eventId: string): void {
+  if (props.readonly) return
+
+  const next = cloneDocument(designDocument.value)
+  const model = next.models.find((candidate) => candidate.id === modelId)
+  if (!model) return
+
+  const previousLength = model.events.length
+  model.events = model.events.filter((item) => item.id !== eventId)
+  if (model.events.length === previousLength) return
+
+  model.triggers.forEach((trigger) => {
+    if (trigger.eventId === eventId) trigger.eventId = null
+  })
+  commitDocument(next, '已删除事件')
+}
+
+function deleteEventParameter(
+  modelId: string,
+  eventId: string,
+  parameterId: string,
+): void {
+  if (props.readonly) return
+
+  const next = cloneDocument(designDocument.value)
+  const item = next.models
+    .find((model) => model.id === modelId)
+    ?.events.find((candidate) => candidate.id === eventId)
+  if (!item) return
+
+  const previousLength = item.parameters.length
+  item.parameters = item.parameters.filter(
+    (parameter) => parameter.id !== parameterId,
+  )
+  if (item.parameters.length === previousLength) return
+
+  commitDocument(next, '已删除事件参数')
+}
+
+function deleteModelTrigger(modelId: string, triggerId: string): void {
+  if (props.readonly) return
+
+  const next = cloneDocument(designDocument.value)
+  const model = next.models.find((candidate) => candidate.id === modelId)
+  if (!model) return
+
+  const previousLength = model.triggers.length
+  model.triggers = model.triggers.filter((item) => item.id !== triggerId)
+  if (model.triggers.length === previousLength) return
+
+  commitDocument(next, '已删除触发器')
+}
+
 function patchModel(modelId: string, patch: ModelPatch, mergeKey?: string): void {
   const next = cloneDocument(designDocument.value)
   const model = next.models.find((candidate) => candidate.id === modelId)
   if (!model) return
 
-  Object.assign(model, patch)
-  if (patch.tags !== undefined) {
-    model.tags = normalizeModelTags(patch.tags)
-  }
+  if (patch.name !== undefined) model.name = patch.name
+  if (patch.code !== undefined) model.code = patch.code
+  if (patch.purpose !== undefined) model.purpose = patch.purpose
+  if (patch.tags !== undefined) model.tags = normalizeModelTags(patch.tags)
+
   if (patch.groupId !== undefined) {
-    model.groupId =
-      patch.groupId && next.groups.some((group) => group.id === patch.groupId)
-        ? patch.groupId
-        : null
+    const group = patch.groupId
+      ? next.groups.find((candidate) => candidate.id === patch.groupId) ?? null
+      : null
+
+    model.groupId = group?.id ?? null
+
+    if (group) {
+      const minX = group.x + GROUP_PADDING
+      const minY = group.y + GROUP_CONTENT_TOP
+      const maxX = Math.max(
+        minX,
+        group.x + group.width - GROUP_PADDING - model.width,
+      )
+      const maxY = Math.max(
+        minY,
+        group.y + group.height - GROUP_PADDING - modelHeight(model),
+      )
+
+      model.x = clamp(model.x, minX, maxX)
+      model.y = clamp(model.y, minY, maxY)
+    }
   }
 
   commitDocument(next, '已更新模型', mergeKey)
@@ -777,6 +977,10 @@ function deleteField(modelId: string, fieldId: string): void {
   if (!model) return
 
   model.fields = model.fields.filter((field) => field.id !== fieldId)
+  model.triggers.forEach((trigger) => {
+    if (trigger.fieldId === fieldId) trigger.fieldId = null
+  })
+
   next.models.forEach((candidate) => {
     candidate.fields.forEach((field) => {
       if (
@@ -801,6 +1005,7 @@ function duplicateModels(modelIds: string[]): string[] {
   const createdIds: string[] = []
   const modelIdMap = new Map<string, string>()
   const fieldIdMaps = new Map<string, Map<string, string>>()
+  const eventIdMaps = new Map<string, Map<string, string>>()
   const copies: Array<{ source: ModelNode; copy: ModelNode }> = []
 
   sourceModels.forEach((source, index) => {
@@ -823,18 +1028,38 @@ function duplicateModels(modelIds: string[]): string[] {
         ...field,
         id: undefined,
       })),
+      events: source.events.map((item) => ({
+        ...item,
+        id: undefined,
+        parameters: item.parameters.map((parameter) => ({
+          ...parameter,
+          id: undefined,
+        })),
+      })),
+      triggers: source.triggers.map((trigger) => ({
+        ...trigger,
+        id: undefined,
+        fieldId: null,
+        eventId: null,
+      })),
     })
     const fieldIdMap = new Map<string, string>()
+    const eventIdMap = new Map<string, string>()
 
     source.fields.forEach((field, fieldIndex) => {
       const copiedField = copy.fields[fieldIndex]
       if (copiedField) fieldIdMap.set(field.id, copiedField.id)
+    })
+    source.events.forEach((item, eventIndex) => {
+      const copiedEvent = copy.events[eventIndex]
+      if (copiedEvent) eventIdMap.set(item.id, copiedEvent.id)
     })
 
     next.models.push(copy)
     createdIds.push(copy.id)
     modelIdMap.set(source.id, copy.id)
     fieldIdMaps.set(source.id, fieldIdMap)
+    eventIdMaps.set(source.id, eventIdMap)
     copies.push({ source, copy })
   })
 
@@ -851,6 +1076,18 @@ function duplicateModels(modelIds: string[]): string[] {
       relation.modelId = copiedTargetModelId
       relation.fieldId = sourceRelation.fieldId
         ? fieldIdMaps.get(sourceRelation.modelId)?.get(sourceRelation.fieldId) ?? null
+        : null
+    })
+
+    source.triggers.forEach((sourceTrigger, triggerIndex) => {
+      const copiedTrigger = copy.triggers[triggerIndex]
+      if (!copiedTrigger) return
+
+      copiedTrigger.fieldId = sourceTrigger.fieldId
+        ? fieldIdMaps.get(source.id)?.get(sourceTrigger.fieldId) ?? null
+        : null
+      copiedTrigger.eventId = sourceTrigger.eventId
+        ? eventIdMaps.get(source.id)?.get(sourceTrigger.eventId) ?? null
         : null
     })
   })
@@ -1310,8 +1547,21 @@ function handleGlobalPointerMove(event: PointerEvent): void {
     return
   }
 
-  dragDeltaX.value = snap(worldDeltaX, props.gridSize)
-  dragDeltaY.value = snap(worldDeltaY, props.gridSize)
+  const snappedDelta = {
+    x: snap(worldDeltaX, props.gridSize),
+    y: snap(worldDeltaY, props.gridSize),
+  }
+  const constrainedDelta =
+    currentGesture.kind === 'models'
+      ? constrainModelMovement(
+          designDocument.value,
+          currentGesture.ids,
+          snappedDelta,
+        )
+      : snappedDelta
+
+  dragDeltaX.value = constrainedDelta.x
+  dragDeltaY.value = constrainedDelta.y
 
   if (currentGesture.kind === 'models') {
     updateDropTarget(currentGesture.ids)
@@ -1348,18 +1598,24 @@ function finishModelDrag(currentGesture: Extract<Gesture, { kind: 'models' }>): 
   const targetGroupId = dropTargetGroupId.value
   if (dx === 0 && dy === 0) return
 
+  const draggedModels = designDocument.value.models.filter((model) =>
+    currentGesture.ids.includes(model.id),
+  )
+  const canEnterGroup = draggedModels.every((model) => !model.groupId)
+
   const next = cloneDocument(designDocument.value)
   next.models.forEach((model) => {
     if (!currentGesture.ids.includes(model.id)) return
+
     model.x += dx
     model.y += dy
-    model.groupId = targetGroupId
+
+    if (canEnterGroup && targetGroupId) {
+      model.groupId = targetGroupId
+    }
   })
 
-  const finalDocument = targetGroupId
-    ? ensureGroupContainsMembers(next, targetGroupId)
-    : next
-  commitDocument(finalDocument, '已移动模型')
+  commitDocument(next, '已移动模型')
 }
 
 function finishGroupDrag(currentGesture: Extract<Gesture, { kind: 'group' }>): void {
@@ -1399,7 +1655,10 @@ function updateDropTarget(modelIds: string[]): void {
   const idSet = new Set(modelIds)
   const models = designDocument.value.models.filter((model) => idSet.has(model.id))
 
-  if (models.length === 0) {
+  if (
+    models.length === 0 ||
+    models.some((model) => model.groupId !== null)
+  ) {
     dropTargetGroupId.value = null
     return
   }
@@ -1414,10 +1673,19 @@ function updateDropTarget(modelIds: string[]): void {
       (model) => model.y + dragDeltaY.value + modelHeight(model),
     ),
   )
-  const target = findContainingGroup(designDocument.value, {
-    x: (minX + maxX) / 2,
-    y: (minY + maxY) / 2,
-  })
+
+  const target =
+    designDocument.value.groups
+      .filter((group) => {
+        const left = group.x + GROUP_PADDING
+        const top = group.y + GROUP_CONTENT_TOP
+        const right = group.x + group.width - GROUP_PADDING
+        const bottom = group.y + group.height - GROUP_PADDING
+
+        return minX >= left && minY >= top && maxX <= right && maxY <= bottom
+      })
+      .sort((left, right) => left.width * left.height - right.width * right.height)[0] ??
+    null
 
   dropTargetGroupId.value = target?.id ?? null
 }
@@ -2104,12 +2372,22 @@ onBeforeUnmount(() => {
         @add-field="addField"
         @update-field="patchField"
         @delete-field="deleteField"
+        @add-event="addModelEvent"
+        @update-event="patchModelEvent"
+        @delete-event="deleteModelEvent"
+        @add-event-parameter="addEventParameter"
+        @update-event-parameter="patchEventParameter"
+        @delete-event-parameter="deleteEventParameter"
+        @add-trigger="addModelTrigger"
+        @update-trigger="patchModelTrigger"
+        @delete-trigger="deleteModelTrigger"
         @duplicate-models="duplicateModels"
         @delete-models="deleteModels"
         @group-models="groupModels"
         @delete-group="deleteGroup"
         @ungroup="ungroup"
         @fit-group="fitGroup"
+        @view-relations="viewRelations"
       />
     </main>
 
