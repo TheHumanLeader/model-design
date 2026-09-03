@@ -36,20 +36,16 @@ const detailFields = computed<ModelField[]>(() => {
   if (!props.detail) return []
 
   const ids = new Set(props.detailFieldIds)
-  if (ids.size > 0) {
-    return props.model.fields.filter((field) => ids.has(field.id))
-  }
-
-  return props.model.fields.filter((field) => field.relation)
+  return props.model.fields.filter((field) => ids.has(field.id))
 })
 
 const visibleFields = computed(() => detailFields.value.slice(0, 6))
 const hiddenFieldCount = computed(() =>
   Math.max(0, detailFields.value.length - visibleFields.value.length),
 )
-const visibleTags = computed(() => (props.model.tags ?? []).slice(0, 3))
+const visibleTags = computed(() => (props.model.tags ?? []).slice(0, 2))
 const hiddenTagCount = computed(() =>
-  Math.max(0, (props.model.tags ?? []).length - 3),
+  Math.max(0, (props.model.tags ?? []).length - visibleTags.value.length),
 )
 const nodeHeight = computed(() =>
   props.detail
@@ -100,27 +96,27 @@ function handleDoubleClick(): void {
     }"
     :style="nodeStyle"
     :data-model-id="model.id"
+    :data-relation-field-count="detail ? detailFields.length : undefined"
     @pointerdown.stop="handlePointerDown"
     @contextmenu.prevent.stop="handleContextMenu"
     @dblclick.stop="handleDoubleClick"
   >
-    <div class="md-model-node__accent"></div>
-
     <header class="md-model-node__header">
-      <span class="md-model-node__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none">
-          <rect x="5" y="4" width="14" height="16" rx="3"></rect>
-          <path d="M8.5 8h7M8.5 12h7M8.5 16h4"></path>
-        </svg>
-      </span>
+      <span class="md-model-node__mark" aria-hidden="true"></span>
 
       <span class="md-model-node__title-wrap">
         <strong class="md-model-node__title">{{ model.name || '未命名模型' }}</strong>
         <span class="md-model-node__code">{{ model.code || 'unnamed_model' }}</span>
       </span>
 
+      <span v-if="detail" class="md-model-node__role">
+        <i></i>
+        {{ relationState === 'focus' ? '焦点' : '关联' }}
+        <b>{{ detailFields.length }}</b>
+      </span>
+
       <button
-        v-if="interactive"
+        v-else-if="interactive"
         class="md-model-node__menu"
         type="button"
         title="模型菜单"
@@ -133,41 +129,42 @@ function handleDoubleClick(): void {
         <span></span>
         <span></span>
       </button>
-
-      <span v-else class="md-model-node__signal" aria-hidden="true">
-        <i></i><i></i><i></i>
-      </span>
     </header>
 
-    <p class="md-model-node__purpose">
-      {{ model.purpose || '选择模型，在右侧配置字段、事件与触发器。' }}
-    </p>
+    <template v-if="!detail">
+      <p class="md-model-node__purpose">
+        {{ model.purpose || '未填写模型用途' }}
+      </p>
 
-    <div v-if="visibleTags.length" class="md-model-node__tags">
-      <span v-for="tag in visibleTags" :key="tag" class="md-model-node__tag">{{ tag }}</span>
-      <span v-if="hiddenTagCount" class="md-model-node__tag is-more">+{{ hiddenTagCount }}</span>
-    </div>
+      <div class="md-model-node__meta">
+        <span class="md-model-node__tag-list">
+          <template v-if="visibleTags.length">
+            <span v-for="tag in visibleTags" :key="tag" class="md-model-node__tag">
+              {{ tag }}
+            </span>
+            <span v-if="hiddenTagCount" class="md-model-node__tag is-more">
+              +{{ hiddenTagCount }}
+            </span>
+          </template>
+          <span v-else class="md-model-node__tag-empty">无标签</span>
+        </span>
 
-    <div v-if="detail" class="md-model-node__relation-context">
-      <span>
-        <i></i>
-        {{ relationState === 'focus' ? 'FOCUS MODEL' : 'RELATED MODEL' }}
-      </span>
-      <small>
-        {{
-          detailFields.length
-            ? `${detailFields.length} 个关系字段`
-            : '模型级关系'
-        }}
-      </small>
-    </div>
+        <span class="md-model-node__metrics">
+          <b title="字段">F {{ model.fields.length }}</b>
+          <b title="事件 / Function">Fn {{ model.events.length }}</b>
+          <b title="触发器">T {{ model.triggers.length }}</b>
+          <b v-if="relationCount" title="关系">R {{ relationCount }}</b>
+        </span>
+      </div>
+    </template>
 
-    <div v-if="detail" class="md-model-node__fields">
+    <div v-else class="md-model-node__fields">
       <template v-if="visibleFields.length">
         <div
           v-for="field in visibleFields"
           :key="field.id"
           class="md-model-node__field"
+          :data-field-id="field.id"
         >
           <span class="md-model-node__field-name">
             <span v-if="field.primaryKey" class="md-model-node__key" title="主键">◆</span>
@@ -187,18 +184,8 @@ function handleDoubleClick(): void {
       </template>
 
       <div v-else class="md-model-node__empty">
-        关系指向模型整体，没有指定目标字段
+        关联模型整体
       </div>
     </div>
-
-    <footer class="md-model-node__footer">
-      <span>{{ model.groupId ? '已加入分组' : '根画板' }}</span>
-      <span class="md-model-node__metrics">
-        <b title="字段">F {{ model.fields.length }}</b>
-        <b title="事件 / Function">Fn {{ model.events.length }}</b>
-        <b title="触发器">T {{ model.triggers.length }}</b>
-        <b v-if="relationCount" title="关系">R {{ relationCount }}</b>
-      </span>
-    </footer>
   </article>
 </template>

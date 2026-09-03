@@ -18,6 +18,19 @@ import {
 } from '../src/core'
 
 describe('model design document', () => {
+  it('keeps normal nodes compact and relation cards field-sized', () => {
+    const model = createModel({
+      fields: Array.from({ length: 24 }, (_, index) => ({
+        name: `字段 ${index + 1}`,
+      })),
+    })
+
+    expect(modelHeight(model)).toBe(110)
+    expect(relationModelHeight(model, 0)).toBe(112)
+    expect(relationModelHeight(model, 1)).toBe(104)
+    expect(relationModelHeight(model, 4)).toBe(218)
+  })
+
   it('creates an empty document', () => {
     expect(createEmptyDocument()).toEqual({
       version: 1,
@@ -67,7 +80,7 @@ describe('model design document', () => {
     const compactHeight = modelHeight(model)
     const relationHeight = relationModelHeight(model, 4)
 
-    expect(compactHeight).toBe(160)
+    expect(compactHeight).toBe(110)
     expect(relationHeight).toBeGreaterThan(compactHeight)
     expect(modelHeight({ ...model, fields: [] })).toBe(compactHeight)
   })
