@@ -102,11 +102,9 @@ function handleDoubleClick(): void {
     @dblclick.stop="handleDoubleClick"
   >
     <header class="md-model-node__header">
-      <span class="md-model-node__mark" aria-hidden="true"></span>
-
-      <span class="md-model-node__title-wrap">
+      <span class="md-model-node__identity">
         <strong class="md-model-node__title">{{ model.name || '未命名模型' }}</strong>
-        <span class="md-model-node__code">{{ model.code || 'unnamed_model' }}</span>
+        <code class="md-model-node__code">{{ model.code || 'unnamed_model' }}</code>
       </span>
 
       <span v-if="detail" class="md-model-node__role">
@@ -133,27 +131,24 @@ function handleDoubleClick(): void {
 
     <template v-if="!detail">
       <p class="md-model-node__purpose">
-        {{ model.purpose || '未填写模型用途' }}
+        {{ model.purpose || '未填写用途' }}
       </p>
 
       <div class="md-model-node__meta">
-        <span class="md-model-node__tag-list">
-          <template v-if="visibleTags.length">
-            <span v-for="tag in visibleTags" :key="tag" class="md-model-node__tag">
-              {{ tag }}
-            </span>
-            <span v-if="hiddenTagCount" class="md-model-node__tag is-more">
-              +{{ hiddenTagCount }}
-            </span>
-          </template>
-          <span v-else class="md-model-node__tag-empty">无标签</span>
+        <span v-if="visibleTags.length" class="md-model-node__tag-list">
+          <span v-for="tag in visibleTags" :key="tag" class="md-model-node__tag">
+            {{ tag }}
+          </span>
+          <span v-if="hiddenTagCount" class="md-model-node__tag is-more">
+            +{{ hiddenTagCount }}
+          </span>
         </span>
 
         <span class="md-model-node__metrics">
-          <b title="字段">F {{ model.fields.length }}</b>
-          <b title="事件 / Function">Fn {{ model.events.length }}</b>
-          <b title="触发器">T {{ model.triggers.length }}</b>
-          <b v-if="relationCount" title="关系">R {{ relationCount }}</b>
+          <b v-if="model.fields.length" title="字段">F{{ model.fields.length }}</b>
+          <b v-if="model.events.length" title="事件 / Function">Fn{{ model.events.length }}</b>
+          <b v-if="model.triggers.length" title="触发器">T{{ model.triggers.length }}</b>
+          <b v-if="relationCount" title="关系">R{{ relationCount }}</b>
         </span>
       </div>
     </template>

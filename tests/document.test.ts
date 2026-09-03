@@ -25,7 +25,7 @@ describe('model design document', () => {
       })),
     })
 
-    expect(modelHeight(model)).toBe(110)
+    expect(modelHeight(model)).toBe(88)
     expect(relationModelHeight(model, 0)).toBe(112)
     expect(relationModelHeight(model, 1)).toBe(104)
     expect(relationModelHeight(model, 4)).toBe(218)
@@ -80,7 +80,7 @@ describe('model design document', () => {
     const compactHeight = modelHeight(model)
     const relationHeight = relationModelHeight(model, 4)
 
-    expect(compactHeight).toBe(110)
+    expect(compactHeight).toBe(88)
     expect(relationHeight).toBeGreaterThan(compactHeight)
     expect(modelHeight({ ...model, fields: [] })).toBe(compactHeight)
   })
