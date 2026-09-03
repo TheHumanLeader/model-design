@@ -1,16 +1,29 @@
 <script setup lang="ts" vapor>
 import { computed } from 'vue'
-import type { ModelNode } from '../types'
+import { modelHeight, relationModelHeight } from '../core'
+import type { ModelField, ModelNode } from '../types'
 
-const props = defineProps<{
-  model: ModelNode
-  x: number
-  y: number
-  selected: boolean
-  dragging: boolean
-  relationState: 'none' | 'focus' | 'related' | 'dimmed'
-  relationCount: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    model: ModelNode
+    x: number
+    y: number
+    selected: boolean
+    dragging: boolean
+    relationState: 'none' | 'focus' | 'related' | 'dimmed'
+    relationCount: number
+    detail?: boolean
+    detailFieldIds?: string[]
+    appearanceIndex?: number
+    interactive?: boolean
+  }>(),
+  {
+    detail: false,
+    detailFieldIds: () => [],
+    appearanceIndex: 0,
+    interactive: true,
+  },
+)
 
 const emit = defineEmits<{
   pointerdown: [modelId: string, event: PointerEvent]
@@ -19,27 +32,57 @@ const emit = defineEmits<{
   doubleclick: [modelId: string]
 }>()
 
+const detailFields = computed<ModelField[]>(() => {
+  if (!props.detail) return []
+
+  const ids = new Set(props.detailFieldIds)
+  if (ids.size > 0) {
+    return props.model.fields.filter((field) => ids.has(field.id))
+  }
+
+  return props.model.fields.filter((field) => field.relation)
+})
+
+const visibleFields = computed(() => detailFields.value.slice(0, 6))
+const hiddenFieldCount = computed(() =>
+  Math.max(0, detailFields.value.length - visibleFields.value.length),
+)
+const visibleTags = computed(() => (props.model.tags ?? []).slice(0, 3))
+const hiddenTagCount = computed(() =>
+  Math.max(0, (props.model.tags ?? []).length - 3),
+)
+const nodeHeight = computed(() =>
+  props.detail
+    ? relationModelHeight(props.model, detailFields.value.length)
+    : modelHeight(props.model),
+)
+
 const nodeStyle = computed(() => ({
   '--md-node-x': `${props.x}px`,
   '--md-node-y': `${props.y}px`,
   '--md-node-width': `${props.model.width}px`,
+  '--md-node-height': `${nodeHeight.value}px`,
+  '--md-relation-delay': `${Math.min(props.appearanceIndex, 12) * 72}ms`,
 }))
 
-const visibleFields = computed(() => props.model.fields.slice(0, 4))
-const hiddenFieldCount = computed(() => Math.max(0, props.model.fields.length - 4))
-const visibleTags = computed(() => (props.model.tags ?? []).slice(0, 3))
-const hiddenTagCount = computed(() => Math.max(0, (props.model.tags ?? []).length - 3))
-
 function handlePointerDown(event: PointerEvent): void {
+  if (!props.interactive) return
   emit('pointerdown', props.model.id, event)
 }
 
 function handleContextMenu(event: MouseEvent): void {
+  if (!props.interactive) return
   emit('contextmenu', props.model.id, event)
 }
 
 function handleMenu(event: MouseEvent): void {
+  if (!props.interactive) return
   emit('menu', props.model.id, event)
+}
+
+function handleDoubleClick(): void {
+  if (!props.interactive) return
+  emit('doubleclick', props.model.id)
 }
 </script>
 
@@ -49,15 +92,17 @@ function handleMenu(event: MouseEvent): void {
     :class="{
       'is-selected': selected,
       'is-dragging': dragging,
+      'is-relation-card': detail,
       'is-relation-focus': relationState === 'focus',
       'is-relation-related': relationState === 'related',
       'is-relation-dimmed': relationState === 'dimmed',
+      'is-static': !interactive,
     }"
     :style="nodeStyle"
     :data-model-id="model.id"
     @pointerdown.stop="handlePointerDown"
     @contextmenu.prevent.stop="handleContextMenu"
-    @dblclick.stop="emit('doubleclick', model.id)"
+    @dblclick.stop="handleDoubleClick"
   >
     <div class="md-model-node__accent"></div>
 
@@ -75,6 +120,7 @@ function handleMenu(event: MouseEvent): void {
       </span>
 
       <button
+        v-if="interactive"
         class="md-model-node__menu"
         type="button"
         title="模型菜单"
@@ -87,6 +133,10 @@ function handleMenu(event: MouseEvent): void {
         <span></span>
         <span></span>
       </button>
+
+      <span v-else class="md-model-node__signal" aria-hidden="true">
+        <i></i><i></i><i></i>
+      </span>
     </header>
 
     <p class="md-model-node__purpose">
@@ -98,7 +148,21 @@ function handleMenu(event: MouseEvent): void {
       <span v-if="hiddenTagCount" class="md-model-node__tag is-more">+{{ hiddenTagCount }}</span>
     </div>
 
-    <div class="md-model-node__fields">
+    <div v-if="detail" class="md-model-node__relation-context">
+      <span>
+        <i></i>
+        {{ relationState === 'focus' ? 'FOCUS MODEL' : 'RELATED MODEL' }}
+      </span>
+      <small>
+        {{
+          detailFields.length
+            ? `${detailFields.length} 个关系字段`
+            : '模型级关系'
+        }}
+      </small>
+    </div>
+
+    <div v-if="detail" class="md-model-node__fields">
       <template v-if="visibleFields.length">
         <div
           v-for="field in visibleFields"
@@ -108,19 +172,22 @@ function handleMenu(event: MouseEvent): void {
           <span class="md-model-node__field-name">
             <span v-if="field.primaryKey" class="md-model-node__key" title="主键">◆</span>
             <span v-if="field.relation" class="md-model-node__relation-icon" title="关系字段">↗</span>
-            {{ field.name || '未命名字段' }}
+            <span class="md-model-node__field-copy">
+              <strong>{{ field.name || '未命名字段' }}</strong>
+              <small>{{ field.code || 'unnamed_field' }}</small>
+            </span>
             <span v-if="field.required" class="md-model-node__required">*</span>
           </span>
           <code>{{ field.type }}</code>
         </div>
 
         <div v-if="hiddenFieldCount" class="md-model-node__field-more">
-          还有 {{ hiddenFieldCount }} 个字段
+          还有 {{ hiddenFieldCount }} 个相关字段
         </div>
       </template>
 
       <div v-else class="md-model-node__empty">
-        尚未配置字段
+        关系指向模型整体，没有指定目标字段
       </div>
     </div>
 
