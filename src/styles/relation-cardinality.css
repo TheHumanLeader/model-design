@@ -1,55 +1,284 @@
-.md-relation-direction {
+/* Relation editor: make direction, endpoints and cardinality readable at a glance. */
+.md-relation-editor {
+  gap: 10px;
+}
+
+.md-relation-editor > header {
+  align-items: flex-start;
+}
+
+.md-relation-editor > header small {
+  line-height: 1.4;
+}
+
+.md-relation-targets {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.md-relation-cardinality-picker {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--md-accent) 18%, var(--md-line));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--md-accent-soft) 24%, transparent);
-}
-
-.md-relation-direction > small {
-  color: var(--md-faint);
-  font-size: 8px;
-}
-
-.md-relation-direction > strong {
-  display: flex;
-  min-width: 0;
-  align-items: center;
   gap: 6px;
-  color: var(--md-text);
+}
+
+.md-relation-cardinality-picker__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--md-muted);
   font-size: 9px;
   font-weight: 650;
 }
 
-.md-relation-direction > strong span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.md-relation-cardinality-picker__label small {
+  color: var(--md-faint);
+  font-size: 8px;
+  font-weight: 500;
 }
 
-.md-relation-direction > strong b {
+.md-relation-cardinality-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.md-relation-cardinality-option {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  border: 1px solid var(--md-line);
+  border-radius: 8px;
+  color: var(--md-muted);
+  background: var(--md-panel-solid);
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.md-relation-cardinality-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--md-accent) 34%, var(--md-line));
+  background: color-mix(in srgb, var(--md-accent-soft) 22%, var(--md-panel-solid));
+}
+
+.md-relation-cardinality-option.is-active {
+  border-color: color-mix(in srgb, var(--md-accent) 70%, var(--md-line));
+  color: var(--md-text);
+  background: color-mix(in srgb, var(--md-accent-soft) 46%, var(--md-panel-solid));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-accent) 9%, transparent);
+}
+
+.md-relation-cardinality-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.md-relation-cardinality-option > i {
+  color: var(--md-accent);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 720;
+  text-align: center;
+}
+
+.md-relation-cardinality-option__side {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.md-relation-cardinality-option__side b {
   display: inline-grid;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 7px;
   color: var(--md-accent);
   background: var(--md-panel-solid);
-  font-size: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 820;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-accent) 18%, var(--md-line));
 }
 
-.md-relation-direction > strong i {
-  flex: 0 0 auto;
-  color: var(--md-accent);
-  font-style: normal;
+.md-relation-cardinality-option__side small {
+  overflow: hidden;
+  color: var(--md-faint);
+  font-size: 8px;
+  font-weight: 580;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.md-relation-preview {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--md-accent) 25%, var(--md-line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--md-accent-soft) 18%, var(--md-panel-solid));
+}
+
+.md-relation-endpoint {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-areas:
+    'role cardinality'
+    'name cardinality'
+    'path cardinality';
+  align-items: center;
+  column-gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--md-line);
+  border-radius: 9px;
+  background: var(--md-panel-solid);
+}
+
+.md-relation-endpoint.is-source {
+  border-color: color-mix(in srgb, var(--md-accent) 32%, var(--md-line));
+}
+
+.md-relation-endpoint.is-target {
+  border-color: color-mix(in srgb, var(--md-success) 38%, var(--md-line));
+}
+
+.md-relation-endpoint__role {
+  grid-area: role;
+  color: var(--md-faint);
+  font-size: 8px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.md-relation-endpoint > strong {
+  grid-area: name;
+  min-width: 0;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  color: var(--md-text);
+  font-size: 11px;
+  font-weight: 730;
+  line-height: 1.35;
+}
+
+.md-relation-endpoint > code {
+  grid-area: path;
+  min-width: 0;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  color: var(--md-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.md-relation-endpoint__cardinality {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  grid-area: cardinality;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--md-accent);
+  background: color-mix(in srgb, var(--md-accent-soft) 58%, var(--md-panel-solid));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-accent) 22%, var(--md-line));
+}
+
+.md-relation-endpoint.is-target .md-relation-endpoint__cardinality {
+  color: var(--md-success);
+  background: color-mix(in srgb, var(--md-success) 9%, var(--md-panel-solid));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-success) 30%, var(--md-line));
+}
+
+.md-relation-preview__connector {
+  position: relative;
+  display: grid;
+  min-height: 48px;
+  place-items: center;
+}
+
+.md-relation-preview__connector::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--md-accent) 58%, transparent),
+    color-mix(in srgb, var(--md-success) 58%, transparent)
+  );
+  content: '';
+}
+
+.md-relation-preview__connector span {
+  position: relative;
+  z-index: 1;
+  max-width: calc(100% - 42px);
+  padding: 4px 10px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-accent) 24%, var(--md-line));
+  border-radius: 999px;
+  color: var(--md-text);
+  background: var(--md-panel-solid);
+  font-size: 9px;
+  font-weight: 680;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-relation-preview__connector i {
+  position: absolute;
+  right: calc(50% - 5px);
+  bottom: -2px;
+  z-index: 1;
+  color: var(--md-success);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.md-relation-preview__sentence {
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--md-line) 74%, transparent);
+  color: var(--md-text);
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 1.55;
+}
+
+.md-relation-preview__path {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--md-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+/* Relationship layer endpoint cardinality badges. */
 .md-relation-cardinality {
   opacity: 0;
   pointer-events: none;
@@ -83,6 +312,12 @@
   to {
     opacity: 1;
     scale: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .md-relation-cardinality-options {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
