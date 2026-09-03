@@ -34,6 +34,22 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
+      - name: Adapt migration to current designer signature
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.automation/apply_gaussian_relation_stage.py')
+          source = path.read_text(encoding='utf-8')
+          needle = 'function groupRelationState(\n"""'
+          replacement = "function groupRelationState(groupId: string): 'none' | 'context' | 'dimmed' {\n\"\"\""
+          count = source.count(needle)
+          if count != 2:
+              raise RuntimeError(f'Expected two group relation placeholders, found {count}')
+          path.write_text(source.replace(needle, replacement), encoding='utf-8')
+          PY
+
       - name: Apply migration
         run: python .automation/apply_gaussian_relation_stage.py
 
