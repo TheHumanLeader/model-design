@@ -364,6 +364,42 @@ const relationFieldIdsByModelId = computed(() => {
 
   return fieldsByModel
 })
+const relationLayoutPositions = computed(() => {
+  const positions = new Map<string, Point>()
+  const focus = relationFocusModel.value
+  if (!focus) return positions
+
+  positions.set(focus.id, {
+    x: 0,
+    y: -relationNodeHeight(focus) / 2,
+  })
+
+  const related = relationVisibleModels.value.filter((model) => model.id !== focus.id)
+  const columnCapacity = 4
+  const columnCount = Math.max(1, Math.ceil(related.length / columnCapacity))
+
+  for (let column = 0; column < columnCount; column += 1) {
+    const items = related.slice(
+      column * columnCapacity,
+      (column + 1) * columnCapacity,
+    )
+    const verticalGap = 46
+    const totalHeight =
+      items.reduce((sum, model) => sum + relationNodeHeight(model), 0) +
+      Math.max(0, items.length - 1) * verticalGap
+    let cursorY = -totalHeight / 2
+
+    items.forEach((model) => {
+      positions.set(model.id, {
+        x: 500 + column * 400,
+        y: cursorY,
+      })
+      cursorY += relationNodeHeight(model) + verticalGap
+    })
+  }
+
+  return positions
+})
 const relationLines = computed<RelationLine[]>(() =>
   focusedRelationEdges.value
     .map(createRelationLine)
@@ -635,6 +671,11 @@ function relationFieldIds(modelId: string): string[] {
   return [...(relationFieldIdsByModelId.value.get(modelId) ?? [])]
 }
 
+function relationFieldsForModel(model: ModelNode): ModelField[] {
+  const ids = new Set(relationFieldIds(model.id))
+  return model.fields.filter((field) => ids.has(field.id))
+}
+
 function relationNodeIndex(modelId: string): number {
   return Math.max(
     0,
@@ -644,6 +685,36 @@ function relationNodeIndex(modelId: string): number {
 
 function relationNodeHeight(model: ModelNode): number {
   return relationModelHeight(model, relationFieldIds(model.id).length)
+}
+
+function relationModelPosition(modelId: string): Point {
+  return (
+    relationLayoutPositions.value.get(modelId) ??
+    designDocument.value.models.find((model) => model.id === modelId) ??
+    { x: 0, y: 0 }
+  )
+}
+
+function relationModelX(model: ModelNode): number {
+  return relationModelPosition(model.id).x
+}
+
+function relationModelY(model: ModelNode): number {
+  return relationModelPosition(model.id).y
+}
+
+function relationFieldAnchorY(
+  model: ModelNode,
+  fieldId: string | null | undefined,
+): number {
+  const fields = relationFieldsForModel(model)
+  const rawIndex = fieldId
+    ? fields.findIndex((field) => field.id === fieldId)
+    : -1
+  const rowIndex = Math.min(Math.max(rawIndex, 0), 5)
+  const rowCenter = fields.length > 0 ? rowIndex * 38 + 19 : 23
+
+  return relationModelY(model) + 50 + 8 + rowCenter
 }
 
 function groupRelationState(groupId: string): 'none' | 'context' | 'dimmed' {
@@ -1364,40 +1435,38 @@ function createRelationLine(edge: RelationEdge): RelationLine | null {
   if (!source || !target) return null
 
   const sourceRect = {
-    x: modelX(source),
-    y: modelY(source),
+    x: relationModelX(source),
+    y: relationModelY(source),
     width: source.width,
     height: relationNodeHeight(source),
   }
   const targetRect = {
-    x: modelX(target),
-    y: modelY(target),
+    x: relationModelX(target),
+    y: relationModelY(target),
     width: target.width,
     height: relationNodeHeight(target),
   }
+  const sourceAnchorY = relationFieldAnchorY(source, edge.sourceField.id)
+  const targetAnchorY = relationFieldAnchorY(target, edge.targetField?.id)
 
   const sourceName = edge.sourceField.name || edge.sourceField.code || '关系字段'
   const relationName = (edge.relation.label ?? '').trim() || sourceName
-  const targetFieldName = edge.targetField?.name || edge.targetField?.code
-  const targetName = targetFieldName
-    ? `${target.name}.${targetFieldName}`
-    : target.name
   const relationType = MODEL_RELATION_TYPE_LABELS[edge.relation.type] ?? '关联'
-  const label = `${relationName} · ${relationType} → ${targetName}`
-  const labelWidth = Math.min(340, Math.max(106, [...label].length * 8.4 + 24))
+  const label = `${relationName} · ${relationType}`
+  const labelWidth = Math.min(180, Math.max(76, [...label].length * 7.2 + 20))
 
   if (source.id === target.id) {
     const startX = sourceRect.x + sourceRect.width
-    const startY = sourceRect.y + Math.min(92, sourceRect.height * 0.42)
-    const endY = Math.min(sourceRect.y + sourceRect.height - 34, startY + 74)
-    const loopX = startX + 104
+    const startY = sourceAnchorY
+    const endY = Math.max(startY + 38, targetAnchorY)
+    const loopX = startX + 116
 
     return {
       id: edge.id,
-      path: `M ${startX} ${startY} C ${loopX} ${startY - 52}, ${loopX} ${endY + 52}, ${startX} ${endY}`,
+      path: `M ${startX} ${startY} C ${loopX} ${startY - 44}, ${loopX} ${endY + 44}, ${startX} ${endY}`,
       label,
-      labelX: loopX - 10,
-      labelY: (startY + endY) / 2,
+      labelX: loopX - 4,
+      labelY: (startY + endY) / 2 - 18,
       labelWidth,
       startX,
       startY,
@@ -1407,47 +1476,20 @@ function createRelationLine(edge: RelationEdge): RelationLine | null {
   }
 
   const sourceCenterX = sourceRect.x + sourceRect.width / 2
-  const sourceCenterY = sourceRect.y + sourceRect.height / 2
   const targetCenterX = targetRect.x + targetRect.width / 2
-  const targetCenterY = targetRect.y + targetRect.height / 2
-  const dx = targetCenterX - sourceCenterX
-  const dy = targetCenterY - sourceCenterY
-
-  let startX: number
-  let startY: number
-  let endX: number
-  let endY: number
-  let control1X: number
-  let control1Y: number
-  let control2X: number
-  let control2Y: number
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    const direction = dx >= 0 ? 1 : -1
-    startX = direction > 0 ? sourceRect.x + sourceRect.width : sourceRect.x
-    startY = sourceCenterY
-    endX = direction > 0 ? targetRect.x : targetRect.x + targetRect.width
-    endY = targetCenterY
-    const curve = Math.min(180, Math.max(14, Math.abs(endX - startX) * 0.45))
-    control1X = startX + direction * curve
-    control1Y = startY
-    control2X = endX - direction * curve
-    control2Y = endY
-  } else {
-    const direction = dy >= 0 ? 1 : -1
-    startX = sourceCenterX
-    startY = direction > 0 ? sourceRect.y + sourceRect.height : sourceRect.y
-    endX = targetCenterX
-    endY = direction > 0 ? targetRect.y : targetRect.y + targetRect.height
-    const curve = Math.min(180, Math.max(14, Math.abs(endY - startY) * 0.45))
-    control1X = startX
-    control1Y = startY + direction * curve
-    control2X = endX
-    control2Y = endY - direction * curve
-  }
-
+  const direction = targetCenterX >= sourceCenterX ? 1 : -1
+  const startX = direction > 0 ? sourceRect.x + sourceRect.width : sourceRect.x
+  const endX = direction > 0 ? targetRect.x : targetRect.x + targetRect.width
+  const startY = sourceAnchorY
+  const endY = targetAnchorY
+  const distance = Math.abs(endX - startX)
+  const curve = Math.min(260, Math.max(90, distance * 0.48))
+  const control1X = startX + direction * curve
+  const control1Y = startY
+  const control2X = endX - direction * curve
+  const control2Y = endY
   const labelX = cubicPoint(startX, control1X, control2X, endX, 0.5)
-  const labelY = cubicPoint(startY, control1Y, control2Y, endY, 0.5)
+  const labelY = cubicPoint(startY, control1Y, control2Y, endY, 0.5) - 18
 
   return {
     id: edge.id,
@@ -1870,23 +1912,25 @@ function fitRelationView(): void {
   const rect = canvasRef.value?.getBoundingClientRect()
   if (!rect || !relationFocusModelId.value) return
 
-  const models = designDocument.value.models.filter((model) =>
-    relationVisibleModelIds.value.has(model.id),
-  )
+  const models = relationVisibleModels.value
   if (models.length === 0) return
 
-  const minX = Math.min(...models.map((model) => model.x))
-  const minY = Math.min(...models.map((model) => model.y))
-  const maxX = Math.max(...models.map((model) => model.x + model.width))
-  const maxY = Math.max(...models.map((model) => model.y + relationNodeHeight(model)))
+  const minX = Math.min(...models.map((model) => relationModelX(model)))
+  const minY = Math.min(...models.map((model) => relationModelY(model)))
+  const maxX = Math.max(
+    ...models.map((model) => relationModelX(model) + model.width),
+  )
+  const maxY = Math.max(
+    ...models.map((model) => relationModelY(model) + relationNodeHeight(model)),
+  )
   const width = Math.max(1, maxX - minX)
   const height = Math.max(1, maxY - minY)
-  const padding = 138
+  const padding = 150
   const nextZoom = clamp(
     Math.min(
       (rect.width - padding * 2) / width,
       (rect.height - padding * 2) / height,
-      1.15,
+      1.18,
     ),
     props.minZoom,
     props.maxZoom,
@@ -2418,8 +2462,8 @@ onBeforeUnmount(() => {
               v-for="model in relationVisibleModels"
               :key="`relation:${model.id}`"
               :model="model"
-              :x="modelX(model)"
-              :y="modelY(model)"
+              :x="relationModelX(model)"
+              :y="relationModelY(model)"
               :selected="false"
               :dragging="false"
               :relation-state="modelRelationState(model.id)"

@@ -19,7 +19,7 @@ import type {
 } from '../types'
 
 export const MODEL_NODE_WIDTH = 270
-export const MODEL_NODE_BASE_HEIGHT = 167
+export const MODEL_NODE_BASE_HEIGHT = 110
 export const GROUP_HEADER_HEIGHT = 48
 export const MIN_GROUP_WIDTH = 336
 export const MIN_GROUP_HEIGHT = 220
@@ -438,25 +438,21 @@ export function snap(value: number, gridSize = DEFAULT_GRID_SIZE): number {
   return Math.round(value / gridSize) * gridSize
 }
 
-export function modelHeight(model: ModelNode): number {
-  const tagHeight = (model.tags?.length ?? 0) > 0 ? 34 : 0
-  return 58 + 43 + tagHeight + 25
+export function modelHeight(_model: ModelNode): number {
+  return MODEL_NODE_BASE_HEIGHT
 }
 
 export function relationModelHeight(
-  model: ModelNode,
+  _model: ModelNode,
   relationFieldCount: number,
 ): number {
   const normalizedCount = Math.max(0, relationFieldCount)
   const visibleFieldCount = Math.min(normalizedCount, 6)
-  const fieldAreaHeight =
-    visibleFieldCount === 0
-      ? 48
-      : 14 +
-        visibleFieldCount * 31 +
-        (normalizedCount > 6 ? 34 : 0)
+  const fieldBodyHeight =
+    visibleFieldCount === 0 ? 46 : visibleFieldCount * 38
+  const overflowHeight = normalizedCount > 6 ? 28 : 0
 
-  return modelHeight(model) + 28 + fieldAreaHeight
+  return 50 + 16 + fieldBodyHeight + overflowHeight
 }
 
 export function modelRect(model: ModelNode): Rect {
