@@ -129,29 +129,20 @@ function handleDoubleClick(): void {
       </button>
     </header>
 
-    <template v-if="!detail">
+    <div v-if="!detail" class="md-model-node__summary">
       <p class="md-model-node__purpose">
         {{ model.purpose || '未填写用途' }}
       </p>
 
-      <div class="md-model-node__meta">
-        <span v-if="visibleTags.length" class="md-model-node__tag-list">
-          <span v-for="tag in visibleTags" :key="tag" class="md-model-node__tag">
-            {{ tag }}
-          </span>
-          <span v-if="hiddenTagCount" class="md-model-node__tag is-more">
-            +{{ hiddenTagCount }}
-          </span>
+      <span v-if="visibleTags.length" class="md-model-node__tag-list">
+        <span v-for="tag in visibleTags" :key="tag" class="md-model-node__tag">
+          {{ tag }}
         </span>
-
-        <span class="md-model-node__metrics">
-          <b v-if="model.fields.length" title="字段">F{{ model.fields.length }}</b>
-          <b v-if="model.events.length" title="事件 / Function">Fn{{ model.events.length }}</b>
-          <b v-if="model.triggers.length" title="触发器">T{{ model.triggers.length }}</b>
-          <b v-if="relationCount" title="关系">R{{ relationCount }}</b>
+        <span v-if="hiddenTagCount" class="md-model-node__tag is-more">
+          +{{ hiddenTagCount }}
         </span>
-      </div>
-    </template>
+      </span>
+    </div>
 
     <div v-else class="md-model-node__fields">
       <template v-if="visibleFields.length">
