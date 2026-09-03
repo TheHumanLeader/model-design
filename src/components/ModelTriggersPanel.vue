@@ -223,6 +223,7 @@ function triggerSummary(item: ModelTrigger): string {
                   v-for="source in MODEL_TRIGGER_SOURCES"
                   :key="source"
                   :value="source"
+                  :selected="item.source === source"
                 >
                   {{ MODEL_TRIGGER_SOURCE_LABELS[source] }}
                 </option>
@@ -240,6 +241,7 @@ function triggerSummary(item: ModelTrigger): string {
                   v-for="timing in MODEL_TRIGGER_TIMINGS"
                   :key="timing"
                   :value="timing"
+                  :selected="item.timing === timing"
                 >
                   {{ MODEL_TRIGGER_TIMING_LABELS[timing] }}
                 </option>
@@ -256,11 +258,12 @@ function triggerSummary(item: ModelTrigger): string {
                 :disabled="readonly"
                 @change="updateField(item, $event)"
               >
-                <option value="">任意字段</option>
+                <option value="" :selected="!item.fieldId">任意字段</option>
                 <option
                   v-for="field in model.fields"
                   :key="field.id"
                   :value="field.id"
+                  :selected="item.fieldId === field.id"
                 >
                   {{ field.name }} · {{ field.code }}
                 </option>
@@ -274,11 +277,12 @@ function triggerSummary(item: ModelTrigger): string {
                 :disabled="readonly"
                 @change="updateEvent(item, $event)"
               >
-                <option value="">未绑定</option>
+                <option value="" :selected="!item.eventId">未绑定</option>
                 <option
                   v-for="eventItem in model.events"
                   :key="eventItem.id"
                   :value="eventItem.id"
+                  :selected="item.eventId === eventItem.id"
                 >
                   {{ eventItem.name }} · {{ eventItem.code }}
                 </option>

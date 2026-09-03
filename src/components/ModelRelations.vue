@@ -12,6 +12,8 @@ export interface RelationLine {
   startY: number
   endX: number
   endY: number
+  sourceCardinality: '1' | 'N'
+  targetCardinality: '1' | 'N'
 }
 
 defineProps<{
@@ -80,6 +82,21 @@ const particleGlowId = createId('md-relation-particle-glow')
         :cy="line.endY"
         r="6"
       ></circle>
+
+      <g
+        class="md-relation-cardinality is-source"
+        :transform="`translate(${line.startX + (line.endX >= line.startX ? 16 : -16)} ${line.startY - 13})`"
+      >
+        <rect x="-10" y="-8" width="20" height="16" rx="8"></rect>
+        <text text-anchor="middle" dominant-baseline="central">{{ line.sourceCardinality }}</text>
+      </g>
+      <g
+        class="md-relation-cardinality is-target"
+        :transform="`translate(${line.endX + (line.endX >= line.startX ? -16 : 16)} ${line.endY - 13})`"
+      >
+        <rect x="-10" y="-8" width="20" height="16" rx="8"></rect>
+        <text text-anchor="middle" dominant-baseline="central">{{ line.targetCardinality }}</text>
+      </g>
 
       <path class="md-relation-line__halo" :d="line.path"></path>
       <path

@@ -322,11 +322,12 @@ function forwardTriggerDelete(modelId: string, triggerId: string): void {
                 :disabled="readonly"
                 @change="updateModelGroup(model, $event)"
               >
-                <option value="">根画板</option>
+                <option value="" :selected="!model.groupId">根画板</option>
                 <option
                   v-for="candidate in groups"
                   :key="candidate.id"
                   :value="candidate.id"
+                  :selected="model.groupId === candidate.id"
                 >
                   {{ candidate.name }}
                 </option>

@@ -1,6 +1,10 @@
 <script setup lang="ts" vapor>
 import { computed, ref, watch } from 'vue'
-import { MODEL_FIELD_TYPES, MODEL_RELATION_TYPES } from '../types'
+import {
+  MODEL_FIELD_TYPES,
+  MODEL_RELATION_CARDINALITIES,
+  MODEL_RELATION_TYPES,
+} from '../types'
 import type {
   FieldPatch,
   ModelField,
@@ -25,10 +29,10 @@ const expandedId = ref<string | null>(null)
 const query = ref('')
 
 const relationTypeLabels: Record<ModelRelationType, string> = {
-  'one-to-one': '1 : 1',
-  'one-to-many': '1 : N',
-  'many-to-one': 'N : 1',
-  'many-to-many': 'N : N',
+  'one-to-one': '当前 1 → 目标 1',
+  'one-to-many': '当前 1 → 目标 N',
+  'many-to-one': '当前 N → 目标 1',
+  'many-to-many': '当前 N → 目标 N',
 }
 
 const filteredFields = computed(() => {
@@ -245,6 +249,7 @@ function updateRelationLabel(field: ModelField, event: Event): void {
                   v-for="fieldType in MODEL_FIELD_TYPES"
                   :key="fieldType"
                   :value="fieldType"
+                  :selected="field.type === fieldType"
                 >
                   {{ fieldType }}
                 </option>
@@ -296,7 +301,7 @@ function updateRelationLabel(field: ModelField, event: Event): void {
           <section class="md-compact-subsection">
             <header>
               <strong>关系</strong>
-              <small>当前字段 → 目标模型字段</small>
+              <small>基数按“当前模型 → 目标模型”读取</small>
             </header>
 
             <div class="md-compact-grid">
@@ -307,11 +312,12 @@ function updateRelationLabel(field: ModelField, event: Event): void {
                   :disabled="readonly"
                   @change="updateRelationModel(field, $event)"
                 >
-                  <option value="">无关系</option>
+                  <option value="" :selected="!field.relation?.modelId">无关系</option>
                   <option
                     v-for="candidate in allModels"
                     :key="candidate.id"
                     :value="candidate.id"
+                    :selected="field.relation?.modelId === candidate.id"
                   >
                     {{ candidate.name }} · {{ candidate.code }}
                   </option>
@@ -326,11 +332,12 @@ function updateRelationLabel(field: ModelField, event: Event): void {
                     :disabled="readonly"
                     @change="updateRelationField(field, $event)"
                   >
-                    <option value="">仅关联模型</option>
+                    <option value="" :selected="!field.relation.fieldId">仅关联模型</option>
                     <option
                       v-for="targetField in relationTarget(field)?.fields || []"
                       :key="targetField.id"
                       :value="targetField.id"
+                      :selected="field.relation.fieldId === targetField.id"
                     >
                       {{ targetField.name }} · {{ targetField.code }}
                     </option>
@@ -348,11 +355,23 @@ function updateRelationLabel(field: ModelField, event: Event): void {
                       v-for="relationType in MODEL_RELATION_TYPES"
                       :key="relationType"
                       :value="relationType"
+                      :selected="field.relation.type === relationType"
                     >
                       {{ relationTypeLabels[relationType] }}
                     </option>
                   </select>
                 </label>
+
+                <div class="md-relation-direction is-wide">
+                  <small>当前模型 → 目标模型</small>
+                  <strong>
+                    <b>{{ MODEL_RELATION_CARDINALITIES[field.relation.type][0] }}</b>
+                    <span>{{ model.name || '当前模型' }}</span>
+                    <i aria-hidden="true">→</i>
+                    <b>{{ MODEL_RELATION_CARDINALITIES[field.relation.type][1] }}</b>
+                    <span>{{ relationTarget(field)?.name || '目标模型' }}</span>
+                  </strong>
+                </div>
 
                 <label class="md-compact-field is-wide">
                   <span>关系名称</span>

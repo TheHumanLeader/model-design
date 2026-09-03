@@ -43,7 +43,10 @@ import {
   normalizeDocument,
   snap,
 } from '../core'
-import { MODEL_RELATION_TYPE_LABELS } from '../types'
+import {
+  MODEL_RELATION_CARDINALITIES,
+  MODEL_RELATION_TYPE_LABELS,
+} from '../types'
 import type {
   DesignerMenuItem,
   DesignerSelection,
@@ -128,6 +131,8 @@ interface RelationLine {
   startY: number
   endX: number
   endY: number
+  sourceCardinality: '1' | 'N'
+  targetCardinality: '1' | 'N'
 }
 
 const props = withDefaults(
@@ -1452,7 +1457,9 @@ function createRelationLine(edge: RelationEdge): RelationLine | null {
   const sourceName = edge.sourceField.name || edge.sourceField.code || '关系字段'
   const relationName = (edge.relation.label ?? '').trim() || sourceName
   const relationType = MODEL_RELATION_TYPE_LABELS[edge.relation.type] ?? '关联'
-  const label = `${relationName} · ${relationType}`
+  const [sourceCardinality, targetCardinality] =
+    MODEL_RELATION_CARDINALITIES[edge.relation.type]
+  const label = `${relationName} · ${sourceCardinality} → ${targetCardinality}`
   const labelWidth = Math.min(180, Math.max(76, [...label].length * 7.2 + 20))
 
   if (source.id === target.id) {
@@ -1472,6 +1479,8 @@ function createRelationLine(edge: RelationEdge): RelationLine | null {
       startY,
       endX: startX,
       endY,
+      sourceCardinality,
+      targetCardinality,
     }
   }
 
@@ -1502,6 +1511,8 @@ function createRelationLine(edge: RelationEdge): RelationLine | null {
     startY,
     endX,
     endY,
+    sourceCardinality,
+    targetCardinality,
   }
 }
 

@@ -43,6 +43,22 @@ export const MODEL_RELATION_TYPE_LABELS: Record<ModelRelationType, string> = {
   'many-to-many': '多对多',
 }
 
+export type ModelRelationCardinality = '1' | 'N'
+
+/**
+ * Relationship cardinality is always read from the field owner (source)
+ * toward the selected target model.
+ */
+export const MODEL_RELATION_CARDINALITIES: Record<
+  ModelRelationType,
+  readonly [ModelRelationCardinality, ModelRelationCardinality]
+> = {
+  'one-to-one': ['1', '1'],
+  'one-to-many': ['1', 'N'],
+  'many-to-one': ['N', '1'],
+  'many-to-many': ['N', 'N'],
+}
+
 export const MODEL_TRIGGER_SOURCE_LABELS: Record<ModelTriggerSource, string> = {
   create: '创建',
   update: '更新',
