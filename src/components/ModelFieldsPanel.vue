@@ -29,10 +29,10 @@ const expandedId = ref<string | null>(null)
 const query = ref('')
 
 const relationTypeLabels: Record<ModelRelationType, string> = {
-  'one-to-one': '当前 1 → 目标 1',
-  'one-to-many': '当前 1 → 目标 N',
-  'many-to-one': '当前 N → 目标 1',
-  'many-to-many': '当前 N → 目标 N',
+  'one-to-one': '一对一',
+  'one-to-many': '一对多',
+  'many-to-one': '多对一',
+  'many-to-many': '多对多',
 }
 
 const filteredFields = computed(() => {
@@ -97,6 +97,14 @@ function relationTarget(field: ModelField): ModelNode | null {
     : null
 }
 
+function relationTargetField(field: ModelField): ModelField | null {
+  const target = relationTarget(field)
+  const fieldId = field.relation?.fieldId
+  if (!target || !fieldId) return null
+
+  return target.fields.find((candidate) => candidate.id === fieldId) ?? null
+}
+
 function updateRelationModel(field: ModelField, event: Event): void {
   const modelId = textValue(event)
 
@@ -138,13 +146,13 @@ function updateRelationField(field: ModelField, event: Event): void {
   })
 }
 
-function updateRelationType(field: ModelField, event: Event): void {
-  if (!field.relation) return
+function updateRelationType(field: ModelField, type: ModelRelationType): void {
+  if (!field.relation || field.relation.type === type) return
 
   emit('update', props.model.id, field.id, {
     relation: {
       ...field.relation,
-      type: textValue(event) as ModelRelationType,
+      type,
     },
   })
 }
@@ -164,6 +172,29 @@ function updateRelationLabel(field: ModelField, event: Event): void {
     },
     `field:${field.id}:relation-label`,
   )
+}
+
+function sourcePath(field: ModelField): string {
+  return `${props.model.code || 'current_model'}.${field.code || 'current_field'}`
+}
+
+function targetPath(field: ModelField): string {
+  const target = relationTarget(field)
+  const targetField = relationTargetField(field)
+  return `${target?.code || 'target_model'}.${targetField?.code || '*'}`
+}
+
+function relationSentence(field: ModelField): string {
+  if (!field.relation) return ''
+
+  const target = relationTarget(field)
+  const [sourceCardinality, targetCardinality] =
+    MODEL_RELATION_CARDINALITIES[field.relation.type]
+  const sourceQuantity = sourceCardinality === '1' ? '1 个' : '多个'
+  const targetQuantity = targetCardinality === '1' ? '1 个' : '多个'
+  const relationName = field.relation.label.trim() || '关联到'
+
+  return `${sourceQuantity}「${props.model.name || '当前模型'}」${relationName}${targetQuantity}「${target?.name || '目标模型'}」`
 }
 </script>
 
@@ -298,15 +329,15 @@ function updateRelationLabel(field: ModelField, event: Event): void {
             </label>
           </div>
 
-          <section class="md-compact-subsection">
+          <section class="md-compact-subsection md-relation-editor">
             <header>
-              <strong>关系</strong>
-              <small>基数按“当前模型 → 目标模型”读取</small>
+              <strong>字段关系</strong>
+              <small>方向固定：当前字段（引用方）→ 目标字段（被引用方）</small>
             </header>
 
-            <div class="md-compact-grid">
+            <div class="md-relation-targets">
               <label class="md-compact-field is-wide">
-                <span>目标模型</span>
+                <span>目标模型 / 被引用方</span>
                 <select
                   :value="field.relation?.modelId || ''"
                   :disabled="readonly"
@@ -324,67 +355,107 @@ function updateRelationLabel(field: ModelField, event: Event): void {
                 </select>
               </label>
 
-              <template v-if="field.relation">
-                <label class="md-compact-field">
-                  <span>目标字段</span>
-                  <select
-                    :value="field.relation.fieldId || ''"
-                    :disabled="readonly"
-                    @change="updateRelationField(field, $event)"
+              <label v-if="field.relation" class="md-compact-field is-wide">
+                <span>目标字段 / 被引用字段</span>
+                <select
+                  :value="field.relation.fieldId || ''"
+                  :disabled="readonly"
+                  @change="updateRelationField(field, $event)"
+                >
+                  <option value="" :selected="!field.relation.fieldId">仅关联模型</option>
+                  <option
+                    v-for="targetField in relationTarget(field)?.fields || []"
+                    :key="targetField.id"
+                    :value="targetField.id"
+                    :selected="field.relation.fieldId === targetField.id"
                   >
-                    <option value="" :selected="!field.relation.fieldId">仅关联模型</option>
-                    <option
-                      v-for="targetField in relationTarget(field)?.fields || []"
-                      :key="targetField.id"
-                      :value="targetField.id"
-                      :selected="field.relation.fieldId === targetField.id"
-                    >
-                      {{ targetField.name }} · {{ targetField.code }}
-                    </option>
-                  </select>
-                </label>
+                    {{ targetField.name }} · {{ targetField.code }} · {{ targetField.type }}
+                  </option>
+                </select>
+              </label>
+            </div>
 
-                <label class="md-compact-field">
-                  <span>类型</span>
-                  <select
-                    :value="field.relation.type"
+            <template v-if="field.relation">
+              <div class="md-relation-cardinality-picker">
+                <span class="md-relation-cardinality-picker__label">
+                  <b>数量关系</b>
+                  <small>左边永远是当前模型，右边永远是目标模型</small>
+                </span>
+
+                <div
+                  class="md-relation-cardinality-options"
+                  role="radiogroup"
+                  aria-label="当前模型到目标模型的数量关系"
+                >
+                  <button
+                    v-for="relationType in MODEL_RELATION_TYPES"
+                    :key="relationType"
+                    class="md-relation-cardinality-option"
+                    :class="{ 'is-active': field.relation.type === relationType }"
+                    type="button"
+                    role="radio"
+                    :aria-checked="field.relation.type === relationType"
+                    :aria-label="`${relationTypeLabels[relationType]}：当前 ${MODEL_RELATION_CARDINALITIES[relationType][0]} 到目标 ${MODEL_RELATION_CARDINALITIES[relationType][1]}`"
+                    :title="`${relationTypeLabels[relationType]}：当前模型 ${MODEL_RELATION_CARDINALITIES[relationType][0]} → 目标模型 ${MODEL_RELATION_CARDINALITIES[relationType][1]}`"
                     :disabled="readonly"
-                    @change="updateRelationType(field, $event)"
+                    @click="updateRelationType(field, relationType)"
                   >
-                    <option
-                      v-for="relationType in MODEL_RELATION_TYPES"
-                      :key="relationType"
-                      :value="relationType"
-                      :selected="field.relation.type === relationType"
-                    >
-                      {{ relationTypeLabels[relationType] }}
-                    </option>
-                  </select>
-                </label>
-
-                <div class="md-relation-direction is-wide">
-                  <small>当前模型 → 目标模型</small>
-                  <strong>
-                    <b>{{ MODEL_RELATION_CARDINALITIES[field.relation.type][0] }}</b>
-                    <span>{{ model.name || '当前模型' }}</span>
+                    <span class="md-relation-cardinality-option__side">
+                      <b>{{ MODEL_RELATION_CARDINALITIES[relationType][0] }}</b>
+                      <small>当前</small>
+                    </span>
                     <i aria-hidden="true">→</i>
-                    <b>{{ MODEL_RELATION_CARDINALITIES[field.relation.type][1] }}</b>
-                    <span>{{ relationTarget(field)?.name || '目标模型' }}</span>
-                  </strong>
+                    <span class="md-relation-cardinality-option__side">
+                      <b>{{ MODEL_RELATION_CARDINALITIES[relationType][1] }}</b>
+                      <small>目标</small>
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <label class="md-compact-field is-wide">
+                <span>关系名称</span>
+                <input
+                  :value="field.relation.label"
+                  :disabled="readonly"
+                  maxlength="80"
+                  placeholder="例如：属于、拥有、创建者"
+                  @input="updateRelationLabel(field, $event)"
+                />
+              </label>
+
+              <div class="md-relation-preview" aria-live="polite">
+                <div class="md-relation-endpoint is-source">
+                  <span class="md-relation-endpoint__role">当前 / 引用方</span>
+                  <strong>{{ model.name || '当前模型' }}</strong>
+                  <code>{{ sourcePath(field) }}</code>
+                  <b class="md-relation-endpoint__cardinality">
+                    {{ MODEL_RELATION_CARDINALITIES[field.relation.type][0] }}
+                  </b>
                 </div>
 
-                <label class="md-compact-field is-wide">
-                  <span>关系名称</span>
-                  <input
-                    :value="field.relation.label"
-                    :disabled="readonly"
-                    maxlength="80"
-                    placeholder="例如：属于、拥有、创建者"
-                    @input="updateRelationLabel(field, $event)"
-                  />
-                </label>
-              </template>
-            </div>
+                <div class="md-relation-preview__connector">
+                  <span>{{ field.relation.label.trim() || '关联到' }}</span>
+                  <i aria-hidden="true">▼</i>
+                </div>
+
+                <div class="md-relation-endpoint is-target">
+                  <span class="md-relation-endpoint__role">目标 / 被引用方</span>
+                  <strong>{{ relationTarget(field)?.name || '目标模型' }}</strong>
+                  <code>{{ targetPath(field) }}</code>
+                  <b class="md-relation-endpoint__cardinality">
+                    {{ MODEL_RELATION_CARDINALITIES[field.relation.type][1] }}
+                  </b>
+                </div>
+
+                <p class="md-relation-preview__sentence">
+                  {{ relationSentence(field) }}
+                </p>
+                <code class="md-relation-preview__path">
+                  {{ sourcePath(field) }} → {{ targetPath(field) }}
+                </code>
+              </div>
+            </template>
           </section>
 
           <footer class="md-entity-detail__actions">
