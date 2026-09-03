@@ -13,6 +13,7 @@ import {
   createModelTrigger,
   fitGroupToContents,
   modelHeight,
+  relationModelHeight,
   normalizeDocument,
 } from '../src/core'
 
@@ -52,6 +53,23 @@ describe('model design document', () => {
     })
 
     expect(model.tags).toEqual(['核心', 'API'])
+  })
+
+  it('keeps canvas nodes compact and expands only relation cards', () => {
+    const model = createModel({
+      name: '订单',
+      tags: ['交易'],
+      fields: Array.from({ length: 20 }, (_, index) => ({
+        name: `字段 ${index + 1}`,
+      })),
+    })
+
+    const compactHeight = modelHeight(model)
+    const relationHeight = relationModelHeight(model, 4)
+
+    expect(compactHeight).toBe(160)
+    expect(relationHeight).toBeGreaterThan(compactHeight)
+    expect(modelHeight({ ...model, fields: [] })).toBe(compactHeight)
   })
 
   it('creates event signatures and trigger defaults', () => {

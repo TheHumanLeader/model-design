@@ -439,16 +439,24 @@ export function snap(value: number, gridSize = DEFAULT_GRID_SIZE): number {
 }
 
 export function modelHeight(model: ModelNode): number {
-  const visibleFieldCount = Math.min(model.fields.length, 4)
   const tagHeight = (model.tags?.length ?? 0) > 0 ? 34 : 0
+  return 58 + 43 + tagHeight + 25
+}
+
+export function relationModelHeight(
+  model: ModelNode,
+  relationFieldCount: number,
+): number {
+  const normalizedCount = Math.max(0, relationFieldCount)
+  const visibleFieldCount = Math.min(normalizedCount, 6)
   const fieldAreaHeight =
     visibleFieldCount === 0
-      ? 41
-      : 12 +
+      ? 48
+      : 14 +
         visibleFieldCount * 31 +
-        (model.fields.length > 4 ? 34 : 0)
+        (normalizedCount > 6 ? 34 : 0)
 
-  return 58 + 43 + tagHeight + fieldAreaHeight + 25
+  return modelHeight(model) + 28 + fieldAreaHeight
 }
 
 export function modelRect(model: ModelNode): Rect {
