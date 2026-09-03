@@ -37,6 +37,7 @@ import {
   getDocumentBounds,
   isSameDocument,
   modelHeight,
+  relationModelHeight,
   nextName,
   normalizeCode,
   normalizeDocument,
@@ -123,6 +124,10 @@ interface RelationLine {
   labelX: number
   labelY: number
   labelWidth: number
+  startX: number
+  startY: number
+  endX: number
+  endY: number
 }
 
 const props = withDefaults(
@@ -188,6 +193,11 @@ const dropTargetGroupId = ref<string | null>(null)
 const spacePressed = ref(false)
 const toastMessage = ref('')
 const relationFocusModelId = ref<string | null>(null)
+const relationPreviousView = shallowRef<{
+  x: number
+  y: number
+  zoom: number
+} | null>(null)
 const past = shallowRef<HistoryEntry[]>([])
 const future = shallowRef<HistoryEntry[]>([])
 
@@ -214,6 +224,7 @@ const rootClass = computed(() => ({
   'md-model-designer--without-toolbar': !props.showToolbar,
   'md-model-designer--without-status': !props.showStatusBar,
   'md-model-designer--without-inspector': !props.showInspector,
+  'md-model-designer--relation-view': Boolean(relationFocusModelId.value),
 }))
 
 const canvasStyle = computed(() => {
@@ -326,6 +337,33 @@ const relationVisibleModelIds = computed(() => {
   })
   return ids
 })
+const relationVisibleModels = computed(() => {
+  const focusId = relationFocusModelId.value
+  return designDocument.value.models
+    .filter((model) => relationVisibleModelIds.value.has(model.id))
+    .sort((left, right) => {
+      if (left.id === focusId) return -1
+      if (right.id === focusId) return 1
+      return left.name.localeCompare(right.name, 'zh-CN')
+    })
+})
+const relationFieldIdsByModelId = computed(() => {
+  const fieldsByModel = new Map<string, Set<string>>()
+
+  const addField = (modelId: string, fieldId: string | null | undefined) => {
+    if (!fieldId) return
+    const fieldIds = fieldsByModel.get(modelId) ?? new Set<string>()
+    fieldIds.add(fieldId)
+    fieldsByModel.set(modelId, fieldIds)
+  }
+
+  focusedRelationEdges.value.forEach((edge) => {
+    addField(edge.sourceModelId, edge.sourceField.id)
+    addField(edge.targetModelId, edge.targetField?.id)
+  })
+
+  return fieldsByModel
+})
 const relationLines = computed<RelationLine[]>(() =>
   focusedRelationEdges.value
     .map(createRelationLine)
@@ -335,6 +373,21 @@ const relationViewActive = computed(() => relationFocusModel.value !== null)
 
 const menuItems = computed<DesignerMenuItem[]>(() => {
   if (menu.target === 'canvas') {
+    if (relationViewActive.value) {
+      return [
+        {
+          id: 'clear-relation-view',
+          label: '退出关系视图',
+          hint: 'Esc',
+        },
+        {
+          id: 'fit-relation-view',
+          label: '重新聚焦关系网络',
+          separatorBefore: true,
+        },
+      ]
+    }
+
     const items: DesignerMenuItem[] = [
       { id: 'create-model', label: '创建模型', hint: '双击' },
       { id: 'create-group', label: '创建空分组' },
@@ -527,22 +580,42 @@ function viewRelations(modelId: string): void {
   const model = designDocument.value.models.find((candidate) => candidate.id === modelId)
   if (!model) return
 
+  if (!relationViewActive.value) {
+    relationPreviousView.value = {
+      x: viewX.value,
+      y: viewY.value,
+      zoom: zoom.value,
+    }
+  }
+
   relationFocusModelId.value = modelId
   setModelSelection([modelId])
   closeMenu()
+  cancelGesture()
 
   const count = relationEdges.value.filter(
     (edge) => edge.sourceModelId === modelId || edge.targetModelId === modelId,
   ).length
-  notify(count > 0 ? `已展示 ${count} 条模型关系` : '该模型暂无字段关系')
+  notify(count > 0 ? `已进入关系图层 · ${count} 条直接关系` : '已进入关系图层 · 暂无直接关系')
   void nextTick(() => fitRelationView())
 }
 
 function clearRelationView(): void {
   if (!relationFocusModelId.value) return
 
+  const previousView = relationPreviousView.value
   relationFocusModelId.value = null
-  notify('已退出关系查看')
+  relationPreviousView.value = null
+  closeMenu()
+  notify('已退出关系图层')
+
+  if (previousView) {
+    requestAnimationFrame(() => {
+      viewX.value = previousView.x
+      viewY.value = previousView.y
+      zoom.value = previousView.zoom
+    })
+  }
 }
 
 function modelRelationState(
@@ -556,6 +629,21 @@ function modelRelationState(
 
 function modelRelationCount(modelId: string): number {
   return relationCountByModelId.value.get(modelId) ?? 0
+}
+
+function relationFieldIds(modelId: string): string[] {
+  return [...(relationFieldIdsByModelId.value.get(modelId) ?? [])]
+}
+
+function relationNodeIndex(modelId: string): number {
+  return Math.max(
+    0,
+    relationVisibleModels.value.findIndex((model) => model.id === modelId),
+  )
+}
+
+function relationNodeHeight(model: ModelNode): number {
+  return relationModelHeight(model, relationFieldIds(model.id).length)
 }
 
 function groupRelationState(groupId: string): 'none' | 'context' | 'dimmed' {
@@ -1279,13 +1367,13 @@ function createRelationLine(edge: RelationEdge): RelationLine | null {
     x: modelX(source),
     y: modelY(source),
     width: source.width,
-    height: modelHeight(source),
+    height: relationNodeHeight(source),
   }
   const targetRect = {
     x: modelX(target),
     y: modelY(target),
     width: target.width,
-    height: modelHeight(target),
+    height: relationNodeHeight(target),
   }
 
   const sourceName = edge.sourceField.name || edge.sourceField.code || '关系字段'
@@ -1311,6 +1399,10 @@ function createRelationLine(edge: RelationEdge): RelationLine | null {
       labelX: loopX - 10,
       labelY: (startY + endY) / 2,
       labelWidth,
+      startX,
+      startY,
+      endX: startX,
+      endY,
     }
   }
 
@@ -1364,6 +1456,10 @@ function createRelationLine(edge: RelationEdge): RelationLine | null {
     labelX,
     labelY,
     labelWidth,
+    startX,
+    startY,
+    endX,
+    endY,
   }
 }
 
@@ -1403,7 +1499,7 @@ function isGroupResizing(groupId: string): boolean {
 }
 
 function startModelDrag(modelId: string, event: PointerEvent): void {
-  if (event.button !== 0) return
+  if (event.button !== 0 || relationViewActive.value) return
 
   const shouldDrag = selectModelForPointer(modelId, event)
   if (!shouldDrag || props.readonly) return
@@ -1494,7 +1590,9 @@ function handleCanvasPointerDown(event: PointerEvent): void {
 
   if (event.button === 0) {
     closeMenu()
-    clearSelection()
+    if (!relationViewActive.value) {
+      clearSelection()
+    }
     rootRef.value?.focus({ preventScroll: true })
   }
 }
@@ -1780,10 +1878,10 @@ function fitRelationView(): void {
   const minX = Math.min(...models.map((model) => model.x))
   const minY = Math.min(...models.map((model) => model.y))
   const maxX = Math.max(...models.map((model) => model.x + model.width))
-  const maxY = Math.max(...models.map((model) => model.y + modelHeight(model)))
+  const maxY = Math.max(...models.map((model) => model.y + relationNodeHeight(model)))
   const width = Math.max(1, maxX - minX)
   const height = Math.max(1, maxY - minY)
-  const padding = 110
+  const padding = 138
   const nextZoom = clamp(
     Math.min(
       (rect.width - padding * 2) / width,
@@ -1874,6 +1972,9 @@ function handleMenuAction(action: string): void {
     case 'clear-relation-view':
       clearRelationView()
       break
+    case 'fit-relation-view':
+      fitRelationView()
+      break
     case 'duplicate-model': {
       const ids =
         targetId && selectedModelIds.value.has(targetId)
@@ -1920,7 +2021,7 @@ function handleMenuAction(action: string): void {
 }
 
 function handleCanvasDoubleClick(event: MouseEvent): void {
-  if (props.readonly || spacePressed.value) return
+  if (props.readonly || spacePressed.value || relationViewActive.value) return
   createModelAt(screenToWorld(event.clientX, event.clientY))
 }
 
@@ -2258,6 +2359,7 @@ onBeforeUnmount(() => {
         :class="{
           'is-panning': gesture?.kind === 'pan',
           'is-space-ready': spacePressed && !gesture,
+          'is-relation-stage': relationViewActive,
         }"
         :style="canvasStyle"
         @pointerdown="handleCanvasPointerDown"
@@ -2287,11 +2389,6 @@ onBeforeUnmount(() => {
             @doubleclick="handleGroupDoubleClick"
           />
 
-          <ModelRelations
-            v-if="relationViewActive"
-            :lines="relationLines"
-          />
-
           <ModelNodeView
             v-for="model in designDocument.models"
             :key="model.id"
@@ -2309,19 +2406,51 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <div v-if="relationFocusModel" class="md-relation-view-bar">
-          <span class="md-relation-view-bar__icon" aria-hidden="true">↗</span>
-          <span>
-            <strong>{{ relationFocusModel.name }}</strong>
-            <small>
-              {{
-                focusedRelationEdges.length
-                  ? `${focusedRelationEdges.length} 条直接关系`
-                  : '暂无字段关系'
-              }}
-            </small>
-          </span>
-          <button type="button" @click="clearRelationView">退出关系查看</button>
+        <div v-if="relationFocusModel" class="md-relation-stage">
+          <div class="md-relation-stage__backdrop"></div>
+          <div class="md-relation-stage__grid"></div>
+          <div class="md-relation-stage__scan"></div>
+
+          <div class="md-relation-stage__world" :style="worldStyle">
+            <ModelRelations :lines="relationLines" />
+
+            <ModelNodeView
+              v-for="model in relationVisibleModels"
+              :key="`relation:${model.id}`"
+              :model="model"
+              :x="modelX(model)"
+              :y="modelY(model)"
+              :selected="false"
+              :dragging="false"
+              :relation-state="modelRelationState(model.id)"
+              :relation-count="modelRelationCount(model.id)"
+              :detail="true"
+              :detail-field-ids="relationFieldIds(model.id)"
+              :appearance-index="relationNodeIndex(model.id)"
+              :interactive="false"
+            />
+          </div>
+
+          <div class="md-relation-stage__hud">
+            <span class="md-relation-stage__mode"><i></i> RELATION LAYER</span>
+            <span class="md-relation-stage__title">
+              <strong>{{ relationFocusModel.name }} · 关系网络</strong>
+              <small>高斯景深图层 · 仅展示直接关联模型和参与关系的字段</small>
+            </span>
+            <span class="md-relation-stage__stats">
+              <span><b>{{ relationVisibleModels.length }}</b> 模型</span>
+              <span><b>{{ focusedRelationEdges.length }}</b> 关系</span>
+            </span>
+            <button class="md-relation-stage__exit" type="button" @click="clearRelationView">
+              <kbd>Esc</kbd>
+              退出图层
+            </button>
+          </div>
+
+          <div class="md-relation-stage__legend">
+            <span><i></i> 关系源</span>
+            <span><i></i> 数据流向</span>
+          </div>
         </div>
 
         <div v-if="isEmpty" class="md-empty-state">
