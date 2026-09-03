@@ -1,0 +1,66 @@
+name: Apply ultra minimal model node
+
+on:
+  push:
+    branches:
+      - refine/ultra-minimal-node-card
+    paths:
+      - .automation/apply_ultra_minimal_geometry.py
+      - .github/workflows/apply-ultra-minimal-node.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-ultra-minimal-model-node
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    name: Apply, test and commit refinement
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: refine/ultra-minimal-node-card
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Apply node geometry
+        run: python .automation/apply_ultra_minimal_geometry.py
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Build package
+        run: npm run build
+
+      - name: Build playground
+        run: npm run build:playground
+
+      - name: Verify npm package
+        run: npm run pack:check
+
+      - name: Commit verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .automation
+          rm -f .github/workflows/apply-ultra-minimal-node.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: make model nodes ultra minimal"
+          git push origin HEAD:refine/ultra-minimal-node-card
