@@ -1,0 +1,179 @@
+.md-model-node__identity {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.md-model-node__identity .md-model-node__title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.md-model-node__identity .md-model-node__code {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.md-model-node:not(.is-relation-card) {
+  height: 88px;
+  border-color: color-mix(in srgb, var(--md-line) 76%, transparent);
+  border-radius: 10px;
+  background: var(--md-panel-solid);
+  box-shadow: 0 1px 2px color-mix(in srgb, #18213a 5%, transparent);
+}
+
+.md-model-node:not(.is-relation-card):hover {
+  border-color: color-mix(in srgb, var(--md-text) 18%, var(--md-line));
+  box-shadow: 0 4px 14px color-mix(in srgb, #18213a 7%, transparent);
+}
+
+.md-model-node:not(.is-relation-card).is-selected {
+  border-color: color-mix(in srgb, var(--md-accent) 64%, var(--md-line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-accent) 10%, transparent);
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__header {
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 9px 0 10px;
+  border: 0;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__title {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 720;
+  letter-spacing: -0.008em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__code {
+  overflow: hidden;
+  color: var(--md-faint);
+  font-size: 7px;
+  font-weight: 560;
+  letter-spacing: 0.025em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__menu {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  opacity: 0;
+}
+
+.md-model-node:not(.is-relation-card):hover .md-model-node__menu,
+.md-model-node:not(.is-relation-card).is-selected .md-model-node__menu,
+.md-model-node:not(.is-relation-card) .md-model-node__menu:focus-visible {
+  opacity: 0.58;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__menu:hover {
+  background: color-mix(in srgb, var(--md-surface) 68%, transparent);
+  opacity: 0.9;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__purpose {
+  display: block;
+  min-height: 20px;
+  margin: 0;
+  padding: 2px 10px 0;
+  overflow: hidden;
+  border: 0;
+  color: var(--md-muted);
+  font-size: 8.5px;
+  font-weight: 450;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__meta {
+  display: flex;
+  min-height: 28px;
+  margin-top: auto;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px 8px;
+  border: 0;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__tag-list {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0;
+  overflow: hidden;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__tag {
+  display: inline;
+  max-width: 72px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  color: var(--md-faint);
+  background: transparent;
+  font-size: 7px;
+  font-weight: 520;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__tag + .md-model-node__tag::before {
+  margin: 0 5px;
+  color: color-mix(in srgb, var(--md-faint) 65%, transparent);
+  content: '·';
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__tag.is-more {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--md-faint) 78%, transparent);
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__metrics {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0;
+  margin-left: auto;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__metrics b {
+  color: var(--md-faint);
+  font-size: 7px;
+  font-weight: 620;
+  line-height: 1;
+}
+
+.md-model-node:not(.is-relation-card) .md-model-node__metrics b + b::before {
+  margin: 0 5px;
+  color: color-mix(in srgb, var(--md-faint) 58%, transparent);
+  content: '·';
+}
+
+.md-relation-stage .md-model-node.is-relation-card .md-model-node__identity {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.md-relation-stage .md-model-node.is-relation-card .md-model-node__title {
+  font-size: 12px;
+}
+
+.md-relation-stage .md-model-node.is-relation-card .md-model-node__code {
+  font-size: 7px;
+}
