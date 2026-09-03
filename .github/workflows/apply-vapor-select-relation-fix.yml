@@ -1,0 +1,74 @@
+name: Apply Vapor select relation fix
+
+on:
+  push:
+    branches:
+      - fix/vapor-select-relation-cardinality
+    paths:
+      - .automation/apply_vapor_select_relation_fix.py
+      - .github/workflows/apply-vapor-select-relation-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-vapor-select-relation-fix
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    name: Apply, test and package fix
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/vapor-select-relation-cardinality
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Apply source changes
+        run: python .automation/apply_vapor_select_relation_fix.py
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Build package
+        run: npm run build
+
+      - name: Build playground
+        run: npm run build:playground
+
+      - name: Verify npm package
+        run: npm run pack:check
+
+      - name: Upload browser smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vapor-select-relation-smoke
+          path: playground-dist
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Commit verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .automation
+          rm -f .github/workflows/apply-vapor-select-relation-fix.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: synchronize Vapor selects and relation cardinality"
+          git push origin HEAD:fix/vapor-select-relation-cardinality
