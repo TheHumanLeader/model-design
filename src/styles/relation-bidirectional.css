@@ -1,0 +1,52 @@
+/* One-to-one relations are mutual: both ends are unique and navigable. */
+.md-relation-stage .md-relation-line.is-one-to-one .md-relation-line__path {
+  stroke-width: 2.35px;
+  stroke-dasharray: none;
+  animation: md-relation-path-appear 0.35s calc(var(--md-edge-delay) + 1.12s) ease-out forwards;
+}
+
+.md-relation-stage .md-relation-marker.is-source {
+  fill: var(--md-accent-2);
+  filter: drop-shadow(
+    0 0 4px color-mix(in srgb, var(--md-accent-2) 82%, transparent)
+  );
+}
+
+.md-relation-stage .md-relation-marker.is-target {
+  fill: var(--md-success);
+}
+
+.md-relation-stage
+  .md-relation-line.is-one-to-one
+  .md-relation-line__terminal.is-source {
+  fill: var(--md-accent-2);
+  stroke: color-mix(in srgb, var(--md-accent-2) 68%, white 16%);
+}
+
+.md-relation-stage
+  .md-relation-line.is-one-to-one
+  .md-relation-line__terminal.is-target {
+  fill: var(--md-success);
+}
+
+.md-relation-stage .md-relation-line.is-one-to-one .md-relation-line__label rect {
+  stroke: color-mix(in srgb, var(--md-accent) 44%, var(--md-line));
+}
+
+.md-relation-stage .md-relation-particle.is-reverse {
+  fill: var(--md-accent-2);
+}
+
+.md-relation-stage
+  .md-relation-line.is-one-to-one
+  .md-relation-cardinality.is-source
+  rect {
+  stroke: color-mix(in srgb, var(--md-accent-2) 62%, var(--md-line));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-relation-stage .md-relation-line.is-one-to-one .md-relation-line__path {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+  }
+}
