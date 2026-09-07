@@ -20,10 +20,24 @@ defineProps<{
   lines: RelationLine[]
 }>()
 
-const markerId = createId('md-relation-arrow')
+const sourceMarkerId = createId('md-relation-arrow-source')
+const targetMarkerId = createId('md-relation-arrow-target')
 const gradientId = createId('md-relation-gradient')
 const glowId = createId('md-relation-glow')
 const particleGlowId = createId('md-relation-particle-glow')
+
+function isOneToOne(line: RelationLine): boolean {
+  return line.sourceCardinality === '1' && line.targetCardinality === '1'
+}
+
+function displayLabel(line: RelationLine): string {
+  const base = line.label
+    .replace(/\s*·\s*[1N]\s*[→↔]\s*[1N]\s*$/, '')
+    .trim()
+  const arrow = isOneToOne(line) ? '↔' : '→'
+
+  return `${base || '关系'} · ${line.sourceCardinality} ${arrow} ${line.targetCardinality}`
+}
 </script>
 
 <template>
@@ -52,7 +66,7 @@ const particleGlowId = createId('md-relation-particle-glow')
       </filter>
 
       <marker
-        :id="markerId"
+        :id="sourceMarkerId"
         markerWidth="12"
         markerHeight="12"
         refX="9"
@@ -60,7 +74,25 @@ const particleGlowId = createId('md-relation-particle-glow')
         orient="auto-start-reverse"
         markerUnits="strokeWidth"
       >
-        <path class="md-relation-marker" d="M 0 0 L 12 6 L 0 12 L 3.2 6 z"></path>
+        <path
+          class="md-relation-marker is-source"
+          d="M 0 0 L 12 6 L 0 12 L 3.2 6 z"
+        ></path>
+      </marker>
+
+      <marker
+        :id="targetMarkerId"
+        markerWidth="12"
+        markerHeight="12"
+        refX="9"
+        refY="6"
+        orient="auto-start-reverse"
+        markerUnits="strokeWidth"
+      >
+        <path
+          class="md-relation-marker is-target"
+          d="M 0 0 L 12 6 L 0 12 L 3.2 6 z"
+        ></path>
       </marker>
     </defs>
 
@@ -68,6 +100,7 @@ const particleGlowId = createId('md-relation-particle-glow')
       v-for="(line, index) in lines"
       :key="line.id"
       class="md-relation-line"
+      :class="{ 'is-one-to-one': isOneToOne(line) }"
       :style="{ '--md-edge-delay': `${index * 90}ms` }"
     >
       <circle
@@ -110,7 +143,8 @@ const particleGlowId = createId('md-relation-particle-glow')
         class="md-relation-line__path"
         :d="line.path"
         :stroke="`url(#${gradientId})`"
-        :marker-end="`url(#${markerId})`"
+        :marker-start="isOneToOne(line) ? `url(#${sourceMarkerId})` : undefined"
+        :marker-end="`url(#${targetMarkerId})`"
       ></path>
 
       <circle
@@ -128,6 +162,25 @@ const particleGlowId = createId('md-relation-particle-glow')
       </circle>
 
       <circle
+        v-if="isOneToOne(line)"
+        class="md-relation-particle is-reverse"
+        r="3.2"
+        :filter="`url(#${particleGlowId})`"
+      >
+        <animateMotion
+          :path="line.path"
+          keyPoints="1;0"
+          keyTimes="0;1"
+          calcMode="linear"
+          dur="2.55s"
+          :begin="`${index * 0.14 - 1.25}s`"
+          repeatCount="indefinite"
+          rotate="auto"
+        ></animateMotion>
+      </circle>
+
+      <circle
+        v-else
         class="md-relation-particle is-secondary"
         r="2.2"
         :filter="`url(#${particleGlowId})`"
@@ -152,7 +205,9 @@ const particleGlowId = createId('md-relation-particle-glow')
           height="28"
           rx="12"
         ></rect>
-        <text text-anchor="middle" dominant-baseline="central">{{ line.label }}</text>
+        <text text-anchor="middle" dominant-baseline="central">
+          {{ displayLabel(line) }}
+        </text>
       </g>
     </g>
   </svg>
